@@ -41,4 +41,4 @@
 
 - [x] 7.1 Wire up main: generate maze → init game state → run loop (input → update → render)
 - [x] 7.2 Display victory message with elapsed time on win
-- [ ] 7.3 Manual playtesting and polish
+- [x] 7.3 Manual playtesting and polish
