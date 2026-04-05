@@ -4,6 +4,7 @@ mod maze;
 mod renderer;
 
 use std::io;
+use std::time::Duration;
 
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind};
 use crossterm::terminal::{self, ClearType};
@@ -25,8 +26,12 @@ fn main() -> io::Result<()> {
     let generator = RecursiveBacktracker;
     let maze = generator.generate(41, 21, None);
 
+    // Compute max time from solution path length
+    let path_length = maze.solve().expect("generated maze must be solvable");
+    let max_time_secs = path_length as f64 * 0.375;
+
     // Init game state
-    let mut state = GameState::new(maze.start);
+    let mut state = GameState::new_with_max_time(maze.start, max_time_secs);
 
     // Setup terminal
     terminal::enable_raw_mode()?;
@@ -39,38 +44,42 @@ fn main() -> io::Result<()> {
     )?;
 
     // Initial render
-    renderer::render(&maze, state.player)?;
+    renderer::render(&maze, state.player, state.elapsed_secs(), max_time_secs)?;
 
-    // Game loop
+    // Game loop (poll-based for continuous timer updates)
     loop {
-        if let Event::Key(KeyEvent {
-            code,
-            kind: KeyEventKind::Press,
-            ..
-        }) = event::read()?
-        {
-            let direction = match code {
-                KeyCode::Up | KeyCode::Char('w') => Some(Direction::Up),
-                KeyCode::Down | KeyCode::Char('s') => Some(Direction::Down),
-                KeyCode::Left | KeyCode::Char('a') => Some(Direction::Left),
-                KeyCode::Right | KeyCode::Char('d') => Some(Direction::Right),
-                KeyCode::Char('q') | KeyCode::Esc => {
-                    state.quit();
-                    None
+        if event::poll(Duration::from_millis(100))? {
+            if let Event::Key(KeyEvent {
+                code,
+                kind: KeyEventKind::Press,
+                ..
+            }) = event::read()?
+            {
+                let direction = match code {
+                    KeyCode::Up | KeyCode::Char('w') => Some(Direction::Up),
+                    KeyCode::Down | KeyCode::Char('s') => Some(Direction::Down),
+                    KeyCode::Left | KeyCode::Char('a') => Some(Direction::Left),
+                    KeyCode::Right | KeyCode::Char('d') => Some(Direction::Right),
+                    KeyCode::Char('q') | KeyCode::Esc => {
+                        state.quit();
+                        None
+                    }
+                    _ => None,
+                };
+
+                if let Some(dir) = direction {
+                    state.move_player(dir, &maze);
                 }
-                _ => None,
-            };
-
-            if let Some(dir) = direction {
-                state.move_player(dir, &maze);
             }
-
-            if state.status != GameStatus::Playing {
-                break;
-            }
-
-            renderer::render(&maze, state.player)?;
         }
+
+        state.check_timeout();
+
+        if state.status != GameStatus::Playing {
+            break;
+        }
+
+        renderer::render(&maze, state.player, state.elapsed_secs(), max_time_secs)?;
     }
 
     // Restore terminal
@@ -83,13 +92,19 @@ fn main() -> io::Result<()> {
     terminal::disable_raw_mode()?;
 
     // Show result
-    if state.status == GameStatus::Won {
-        println!(
-            "You escaped the maze in {:.1} seconds!",
-            state.elapsed_secs()
-        );
-    } else {
-        println!("Quit. Better luck next time!");
+    match state.status {
+        GameStatus::Won => {
+            println!(
+                "You escaped the maze in {:.1} seconds!",
+                state.elapsed_secs()
+            );
+        }
+        GameStatus::Lost => {
+            println!("Time's up! You ran out of time.");
+        }
+        _ => {
+            println!("Quit. Better luck next time!");
+        }
     }
 
     Ok(())

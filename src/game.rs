@@ -6,6 +6,7 @@ use crate::maze::Maze;
 pub enum GameStatus {
     Playing,
     Won,
+    Lost,
     Quit,
 }
 
@@ -13,6 +14,7 @@ pub struct GameState {
     pub player: (usize, usize),
     pub status: GameStatus,
     pub start_time: Instant,
+    pub max_time_secs: f64,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -24,11 +26,17 @@ pub enum Direction {
 }
 
 impl GameState {
+    #[cfg(test)]
     pub fn new(start: (usize, usize)) -> Self {
+        Self::new_with_max_time(start, f64::INFINITY)
+    }
+
+    pub fn new_with_max_time(start: (usize, usize), max_time_secs: f64) -> Self {
         Self {
             player: start,
             status: GameStatus::Playing,
             start_time: Instant::now(),
+            max_time_secs,
         }
     }
 
@@ -51,6 +59,12 @@ impl GameState {
             if self.player == maze.exit {
                 self.status = GameStatus::Won;
             }
+        }
+    }
+
+    pub fn check_timeout(&mut self) {
+        if self.status == GameStatus::Playing && self.elapsed_secs() >= self.max_time_secs {
+            self.status = GameStatus::Lost;
         }
     }
 
@@ -178,5 +192,55 @@ mod tests {
         state.quit();
         state.move_player(Direction::Right, &maze);
         assert_eq!(state.player, (1, 1)); // Didn't move
+    }
+
+    #[test]
+    fn new_with_max_time_sets_fields() {
+        let maze = test_maze();
+        let state = GameState::new_with_max_time(maze.start, 60.0);
+        assert_eq!(state.max_time_secs, 60.0);
+        assert_eq!(state.status, GameStatus::Playing);
+    }
+
+    #[test]
+    fn check_timeout_does_not_trigger_before_max_time() {
+        let maze = test_maze();
+        let mut state = GameState::new_with_max_time(maze.start, 9999.0);
+        state.check_timeout();
+        assert_eq!(state.status, GameStatus::Playing);
+    }
+
+    #[test]
+    fn check_timeout_triggers_lost() {
+        let maze = test_maze();
+        // Use a max time of 0 so it's already expired
+        let mut state = GameState::new_with_max_time(maze.start, 0.0);
+        state.check_timeout();
+        assert_eq!(state.status, GameStatus::Lost);
+    }
+
+    #[test]
+    fn cannot_move_after_lost() {
+        let maze = test_maze();
+        let mut state = GameState::new_with_max_time(maze.start, 0.0);
+        state.check_timeout();
+        assert_eq!(state.status, GameStatus::Lost);
+        state.move_player(Direction::Right, &maze);
+        assert_eq!(state.player, (1, 1)); // Didn't move
+    }
+
+    #[test]
+    fn check_timeout_no_effect_after_won() {
+        let maze = test_maze();
+        let mut state = GameState::new_with_max_time(maze.start, 0.0);
+        // Win first
+        state.move_player(Direction::Right, &maze);
+        state.move_player(Direction::Right, &maze);
+        state.move_player(Direction::Down, &maze);
+        state.move_player(Direction::Down, &maze);
+        assert_eq!(state.status, GameStatus::Won);
+        // Timeout should not override Won
+        state.check_timeout();
+        assert_eq!(state.status, GameStatus::Won);
     }
 }
