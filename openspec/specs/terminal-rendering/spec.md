@@ -39,3 +39,14 @@ The system SHALL define all tile-to-character mappings in the renderer module, s
 #### Scenario: Adding a new tile type
 - **WHEN** a new `Tile` variant is added
 - **THEN** only the renderer module needs a new character mapping to display it
+
+### Requirement: Status bar rendering
+The system SHALL render a status bar on the first row of the terminal, above the maze grid.
+
+#### Scenario: Status bar position
+- **WHEN** the maze is rendered
+- **THEN** the status bar occupies row 0 and the maze grid starts at row 1
+
+#### Scenario: Status bar contains timer
+- **WHEN** the status bar is rendered
+- **THEN** it displays the countdown timer right-aligned to the maze's display width
