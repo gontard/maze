@@ -36,3 +36,37 @@ Used OpenSpec for structured planning (proposal, design, specs, tasks), then TDD
 ### What's next
 
 Potential features discussed during exploration: fog of war, new tile types (trees, rocks, water), different generation algorithms (Kruskal's, Prim's), dynamic sizing, color, difficulty levels.
+
+## Session 2026-04-05: Countdown Timer
+
+### What we built
+
+A visible countdown timer with a time-based lose condition. The timer displays above the maze in a status bar, updates continuously, and changes color as time runs out.
+
+### Changes
+
+- **maze.rs** - Added `Maze::solve()` BFS method returning shortest path length (`Option<usize>`)
+- **game.rs** - New `GameStatus::Lost` variant, `max_time_secs` field, `check_timeout()` method that transitions to `Lost` when time expires
+- **renderer.rs** - Status bar row above the maze with right-aligned timer (`⏱ MM:SS / MM:SS`). Color urgency via crossterm: cyan (>25% remaining), dark yellow (10-25%), red (<10%). Helper functions `format_timer`, `timer_urgency`, `urgency_color`.
+- **main.rs** - Poll-based game loop (`event::poll(100ms)` instead of blocking `event::read()`), computes max time from solution path length × 0.375s, handles `Lost` status with timeout message
+
+### Key decisions made during exploration
+
+- **Status bar above maze** (dedicated row) rather than overlaying on maze row 0
+- **Max time from solution path length** (BFS shortest path × multiplier) rather than fixed time or area-based
+- **Poll-based loop** for continuous timer updates even when idle, rather than a separate rendering thread
+- **Time multiplier tuned to 0.375s/step** — started at 1.5s but was too generous, divided by 4 after playtesting
+- **Cyan for normal timer** — white was barely visible on terminal; dark yellow replaced yellow for the same reason
+
+### Workflow
+
+OpenSpec explore mode for design discussion, then propose for artifacts, TDD for implementation. 49 tests total (17 new: 3 solver, 5 game timer, 9 renderer).
+
+### Commits
+
+1. `bda001e` - Add countdown timer with time-based lose condition
+2. `537cb1b` - Archive add-timer change and sync specs
+
+### What's next
+
+Potential features: fog of war, difficulty levels (maze size + time scaling), pause/resume, configurable time multiplier via CLI args.
