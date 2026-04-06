@@ -70,3 +70,36 @@ OpenSpec explore mode for design discussion, then propose for artifacts, TDD for
 ### What's next
 
 Potential features: fog of war, difficulty levels (maze size + time scaling), pause/resume, configurable time multiplier via CLI args.
+
+## Session 2026-04-06: Maze Chaining (Infinite Tower)
+
+### What we built
+
+Infinite floor progression — when the player reaches the exit, a new maze generates around them and they continue on the next floor. The game becomes an endless tower climb until timeout or quit.
+
+### Changes
+
+- **generator.rs** - `MazeGenerator::generate` now accepts optional start position (`Option<(usize, usize)>`). Replaced `find_bottom_right_path` with `farthest_reachable()` — BFS from start to find the cell with maximum distance, maximizing challenge per floor. Carving starts from the provided position instead of hardcoded (1,1).
+- **renderer.rs** - `render()` and `render_to_string()` take a `level: usize` parameter. Status bar now shows "Floor N" left-aligned and timer right-aligned, padded to maze width. `build_status_bar` updated for the two-element layout.
+- **main.rs** - Outer level loop wrapping the game loop. Tracks `level` counter and `start_pos`. On `Won`: generates new maze with `start = previous exit`, fresh `GameState`, increments level. On `Lost`/`Quit`: breaks out and shows floor count ("You cleared N floors").
+
+### Key decisions made during exploration
+
+- **Farthest reachable point for exit** rather than bottom-right heuristic — when start varies across floors, bottom-right might place exit adjacent to start. BFS farthest guarantees maximum traversal.
+- **"Elevator" transition** — no animation, maze simply changes around the player. Mental model: square tower, player takes elevator to new floor.
+- **Level in render params, not GameState** — level is display context, not game mechanics. Keeps GameState focused on movement/timer/status.
+- **Timer resets per floor** with fresh time budget from each floor's solution path length.
+- **Same maze dimensions** (41x21) on all floors — no difficulty progression for now.
+
+### Workflow
+
+OpenSpec explore mode for design discussion, then propose for all artifacts, TDD for implementation. 56 tests total (7 new: farthest exit verification, custom start position, floor label rendering).
+
+### Commits
+
+1. `56c2302` - Add infinite maze chaining with floor progression
+2. `f866675` - Archive chain-mazes change and sync specs
+
+### What's next
+
+Potential features: increasing difficulty per floor (larger mazes, tighter timers), score system, fog of war, pause/resume.
