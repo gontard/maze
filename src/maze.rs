@@ -71,7 +71,44 @@ impl Maze {
         max_size: usize,
         rng: &mut impl rand::Rng,
     ) {
-        todo!()
+        use rand::RngExt;
+
+        for _ in 0..count {
+            // Pick random odd-aligned room dimensions
+            let rw = {
+                let half_min = min_size / 2;
+                let half_max = max_size / 2;
+                rng.random_range(half_min..=half_max) * 2 + 1
+            };
+            let rh = {
+                let half_min = min_size / 2;
+                let half_max = max_size / 2;
+                rng.random_range(half_min..=half_max) * 2 + 1
+            };
+
+            // Pick random odd-aligned top-left corner within border
+            let max_x = (self.width - 1 - rw) / 2;
+            let max_y = (self.height - 1 - rh) / 2;
+            if max_x < 1 || max_y < 1 {
+                continue;
+            }
+            let rx = rng.random_range(1..=max_x) * 2 - 1;
+            let ry = rng.random_range(1..=max_y) * 2 - 1;
+
+            // Carve: only convert Wall to Path
+            for y in ry..ry + rh {
+                for x in rx..rx + rw {
+                    if x > 0
+                        && x < self.width - 1
+                        && y > 0
+                        && y < self.height - 1
+                        && self.grid[y][x] == Tile::Wall
+                    {
+                        self.grid[y][x] = Tile::Path;
+                    }
+                }
+            }
+        }
     }
 
     pub fn solve(&self) -> Option<usize> {
@@ -304,7 +341,10 @@ mod tests {
         let mut rng = StdRng::seed_from_u64(99);
         maze.carve_rooms(5, 3, 5, &mut rng);
         maze.place_exit();
-        assert!(maze.solve().is_some(), "maze must be solvable after room carving");
+        assert!(
+            maze.solve().is_some(),
+            "maze must be solvable after room carving"
+        );
     }
 
     #[test]
