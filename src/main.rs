@@ -22,17 +22,6 @@ fn main() -> io::Result<()> {
         default_hook(info);
     }));
 
-    // Generate maze
-    let generator = RecursiveBacktracker;
-    let maze = generator.generate(41, 21, None);
-
-    // Compute max time from solution path length
-    let path_length = maze.solve().expect("generated maze must be solvable");
-    let max_time_secs = path_length as f64 * 0.375;
-
-    // Init game state
-    let mut state = GameState::new_with_max_time(maze.start, max_time_secs);
-
     // Setup terminal
     terminal::enable_raw_mode()?;
     let mut stdout = io::stdout();
@@ -43,43 +32,84 @@ fn main() -> io::Result<()> {
         cursor::MoveTo(0, 0)
     )?;
 
-    // Initial render
-    renderer::render(&maze, state.player, state.elapsed_secs(), max_time_secs)?;
+    let generator = RecursiveBacktracker;
+    let mut level: usize = 1;
+    let mut start_pos: Option<(usize, usize)> = None;
+    let mut final_status;
 
-    // Game loop (poll-based for continuous timer updates)
+    // Level loop: each iteration is one floor of the tower
     loop {
-        if event::poll(Duration::from_millis(100))? {
-            if let Event::Key(KeyEvent {
-                code,
-                kind: KeyEventKind::Press,
-                ..
-            }) = event::read()?
-            {
-                let direction = match code {
-                    KeyCode::Up | KeyCode::Char('w') => Some(Direction::Up),
-                    KeyCode::Down | KeyCode::Char('s') => Some(Direction::Down),
-                    KeyCode::Left | KeyCode::Char('a') => Some(Direction::Left),
-                    KeyCode::Right | KeyCode::Char('d') => Some(Direction::Right),
-                    KeyCode::Char('q') | KeyCode::Esc => {
-                        state.quit();
-                        None
-                    }
-                    _ => None,
-                };
+        // Generate maze (first floor uses default start, subsequent floors use previous exit)
+        let maze = generator.generate(41, 21, None, start_pos);
 
-                if let Some(dir) = direction {
-                    state.move_player(dir, &maze);
+        // Compute max time from solution path length
+        let path_length = maze.solve().expect("generated maze must be solvable");
+        let max_time_secs = path_length as f64 * 0.375;
+
+        // Fresh game state for this floor
+        let mut state = GameState::new_with_max_time(maze.start, max_time_secs);
+
+        // Initial render
+        renderer::render(
+            &maze,
+            state.player,
+            level,
+            state.elapsed_secs(),
+            max_time_secs,
+        )?;
+
+        // Game loop (poll-based for continuous timer updates)
+        loop {
+            if event::poll(Duration::from_millis(100))? {
+                if let Event::Key(KeyEvent {
+                    code,
+                    kind: KeyEventKind::Press,
+                    ..
+                }) = event::read()?
+                {
+                    let direction = match code {
+                        KeyCode::Up | KeyCode::Char('w') => Some(Direction::Up),
+                        KeyCode::Down | KeyCode::Char('s') => Some(Direction::Down),
+                        KeyCode::Left | KeyCode::Char('a') => Some(Direction::Left),
+                        KeyCode::Right | KeyCode::Char('d') => Some(Direction::Right),
+                        KeyCode::Char('q') | KeyCode::Esc => {
+                            state.quit();
+                            None
+                        }
+                        _ => None,
+                    };
+
+                    if let Some(dir) = direction {
+                        state.move_player(dir, &maze);
+                    }
                 }
             }
+
+            state.check_timeout();
+
+            if state.status != GameStatus::Playing {
+                break;
+            }
+
+            renderer::render(
+                &maze,
+                state.player,
+                level,
+                state.elapsed_secs(),
+                max_time_secs,
+            )?;
         }
 
-        state.check_timeout();
+        final_status = state.status;
 
-        if state.status != GameStatus::Playing {
-            break;
+        match state.status {
+            GameStatus::Won => {
+                // Next floor: start where we are (the exit of this maze)
+                start_pos = Some(maze.exit);
+                level += 1;
+            }
+            _ => break, // Lost or Quit — end the game
         }
-
-        renderer::render(&maze, state.player, state.elapsed_secs(), max_time_secs)?;
     }
 
     // Restore terminal
@@ -91,19 +121,20 @@ fn main() -> io::Result<()> {
     )?;
     terminal::disable_raw_mode()?;
 
-    // Show result
-    match state.status {
-        GameStatus::Won => {
+    // Show result with floor count
+    let floors_cleared = level - 1;
+    match final_status {
+        GameStatus::Lost => {
             println!(
-                "You escaped the maze in {:.1} seconds!",
-                state.elapsed_secs()
+                "Time's up on floor {level}! You cleared {floors_cleared} floor{}.",
+                if floors_cleared == 1 { "" } else { "s" }
             );
         }
-        GameStatus::Lost => {
-            println!("Time's up! You ran out of time.");
-        }
         _ => {
-            println!("Quit. Better luck next time!");
+            println!(
+                "Quit on floor {level}. You cleared {floors_cleared} floor{}.",
+                if floors_cleared == 1 { "" } else { "s" }
+            );
         }
     }
 

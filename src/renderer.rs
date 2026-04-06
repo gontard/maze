@@ -52,32 +52,45 @@ fn urgency_color(urgency: TimerUrgency) -> Color {
 }
 
 #[cfg(test)]
-fn build_status_bar(maze_width: usize, elapsed: f64, max_time: f64) -> String {
+fn build_status_bar(maze_width: usize, level: usize, elapsed: f64, max_time: f64) -> String {
+    let floor_label = format!("Floor {level}");
     let timer = format_timer(elapsed, max_time);
-    let timer_display_len = timer.chars().count();
-    if timer_display_len >= maze_width {
-        timer[..maze_width].to_string()
+    let floor_len = floor_label.len();
+    let timer_len = timer.chars().count();
+    let total = floor_len + timer_len;
+    if total >= maze_width {
+        format!("{floor_label}{timer}")
     } else {
-        let padding = maze_width - timer_display_len;
-        format!("{}{}", " ".repeat(padding), timer)
+        let padding = maze_width - total;
+        format!("{floor_label}{}{timer}", " ".repeat(padding))
     }
 }
 
-pub fn render(maze: &Maze, player: (usize, usize), elapsed: f64, max_time: f64) -> io::Result<()> {
+pub fn render(
+    maze: &Maze,
+    player: (usize, usize),
+    level: usize,
+    elapsed: f64,
+    max_time: f64,
+) -> io::Result<()> {
     let mut stdout = io::stdout();
     execute!(stdout, cursor::MoveTo(0, 0))?;
 
-    // Render colored status bar
+    // Render status bar: "Floor N" left-aligned, timer right-aligned
+    let floor_label = format!("Floor {level}");
     let timer_text = format_timer(elapsed, max_time);
-    let timer_display_len = timer_text.chars().count();
-    let padding = if timer_display_len < maze.width {
-        maze.width - timer_display_len
+    let floor_len = floor_label.len();
+    let timer_len = timer_text.chars().count();
+    let total = floor_len + timer_len;
+    let padding = if total < maze.width {
+        maze.width - total
     } else {
         0
     };
     let color = urgency_color(timer_urgency(elapsed, max_time));
     execute!(
         stdout,
+        Print(&floor_label),
         Print(" ".repeat(padding)),
         SetForegroundColor(color),
         Print(&timer_text),
@@ -107,12 +120,13 @@ pub fn render(maze: &Maze, player: (usize, usize), elapsed: f64, max_time: f64) 
 pub fn render_to_string(
     maze: &Maze,
     player: (usize, usize),
+    level: usize,
     elapsed: f64,
     max_time: f64,
 ) -> String {
     let mut buf = String::new();
     // Status bar
-    buf.push_str(&build_status_bar(maze.width, elapsed, max_time));
+    buf.push_str(&build_status_bar(maze.width, level, elapsed, max_time));
     buf.push_str("\r\n");
     // Maze grid
     for y in 0..maze.height {
@@ -147,10 +161,29 @@ mod tests {
         }
     }
 
+    fn wide_maze() -> Maze {
+        // 41-wide maze (like the real game) but only 3 rows tall
+        let row_wall = vec![Tile::Wall; 41];
+        let mut row_mid = vec![Tile::Wall; 41];
+        row_mid[1] = Tile::Start;
+        row_mid[39] = Tile::Exit;
+        for i in 2..39 {
+            row_mid[i] = Tile::Path;
+        }
+        let grid = vec![row_wall.clone(), row_mid, row_wall];
+        Maze {
+            grid,
+            width: 41,
+            height: 3,
+            start: (1, 1),
+            exit: (39, 1),
+        }
+    }
+
     #[test]
     fn rendered_maze_line_width_matches_grid_width() {
         let maze = small_maze();
-        let output = render_to_string(&maze, maze.start, 0.0, 60.0);
+        let output = render_to_string(&maze, maze.start, 1, 0.0, 60.0);
         // Skip status bar (line 0), check maze lines
         for line in output.lines().skip(1) {
             assert_eq!(line.len(), maze.width, "line: {line:?}");
@@ -160,14 +193,14 @@ mod tests {
     #[test]
     fn rendered_line_count_includes_status_bar() {
         let maze = small_maze();
-        let output = render_to_string(&maze, maze.start, 0.0, 60.0);
+        let output = render_to_string(&maze, maze.start, 1, 0.0, 60.0);
         assert_eq!(output.lines().count(), maze.height + 1);
     }
 
     #[test]
     fn player_renders_at_position() {
         let maze = small_maze();
-        let output = render_to_string(&maze, (1, 1), 0.0, 60.0);
+        let output = render_to_string(&maze, (1, 1), 1, 0.0, 60.0);
         let lines: Vec<&str> = output.lines().collect();
         assert_eq!(lines[2], "#@#"); // line 0 is status bar
     }
@@ -175,7 +208,7 @@ mod tests {
     #[test]
     fn wall_renders_as_hash() {
         let maze = small_maze();
-        let output = render_to_string(&maze, (1, 1), 0.0, 60.0);
+        let output = render_to_string(&maze, (1, 1), 1, 0.0, 60.0);
         let lines: Vec<&str> = output.lines().collect();
         assert_eq!(lines[1], "###"); // line 0 is status bar
     }
@@ -183,7 +216,7 @@ mod tests {
     #[test]
     fn exit_renders_correctly() {
         let maze = small_maze();
-        let output = render_to_string(&maze, (1, 1), 0.0, 60.0);
+        let output = render_to_string(&maze, (1, 1), 1, 0.0, 60.0);
         let lines: Vec<&str> = output.lines().collect();
         assert_eq!(lines[3], "#E#"); // line 0 is status bar
     }
@@ -208,38 +241,60 @@ mod tests {
 
     #[test]
     fn format_timer_elapsed_exceeds_max() {
-        // Should clamp display to max
         assert_eq!(format_timer(130.0, 120.0), "⏱ 02:10 / 02:00");
     }
 
     #[test]
-    fn status_bar_is_first_line() {
-        let maze = small_maze();
-        let output = render_to_string(&maze, maze.start, 30.0, 60.0);
-        let lines: Vec<&str> = output.lines().collect();
-        // First line is the status bar, maze starts at line 1
-        assert!(lines[0].contains("⏱"), "status bar should contain timer");
-        assert_eq!(lines.len(), maze.height + 1); // status bar + maze rows
+    fn status_bar_contains_floor_and_timer() {
+        let maze = wide_maze();
+        let output = render_to_string(&maze, maze.start, 3, 30.0, 60.0);
+        let status_line = output.lines().next().unwrap();
+        assert!(
+            status_line.starts_with("Floor 3"),
+            "status bar should start with floor label"
+        );
+        assert!(status_line.contains("⏱"), "status bar should contain timer");
     }
 
     #[test]
-    fn status_bar_right_aligned_to_maze_width() {
-        let maze = small_maze();
-        let output = render_to_string(&maze, maze.start, 0.0, 60.0);
+    fn status_bar_floor_left_timer_right() {
+        let maze = wide_maze();
+        let output = render_to_string(&maze, maze.start, 1, 0.0, 60.0);
+        let status_line = output.lines().next().unwrap();
+        let floor_pos = status_line.find("Floor").unwrap();
+        let timer_pos = status_line.find("⏱").unwrap();
+        assert_eq!(floor_pos, 0, "floor label should be at the start");
+        assert!(timer_pos > floor_pos, "timer should be after floor label");
+    }
+
+    #[test]
+    fn status_bar_width_matches_maze_width() {
+        let maze = wide_maze();
+        let output = render_to_string(&maze, maze.start, 1, 0.0, 60.0);
         let status_line = output.lines().next().unwrap();
         assert_eq!(
-            status_line.len(),
+            status_line.chars().count(),
             maze.width,
-            "status bar width should match maze width"
+            "status bar char count should match maze width"
         );
+    }
+
+    #[test]
+    fn status_bar_floor_number_updates() {
+        let maze = wide_maze();
+        let output1 = render_to_string(&maze, maze.start, 1, 0.0, 60.0);
+        let output7 = render_to_string(&maze, maze.start, 7, 0.0, 60.0);
+        let line1 = output1.lines().next().unwrap();
+        let line7 = output7.lines().next().unwrap();
+        assert!(line1.starts_with("Floor 1"));
+        assert!(line7.starts_with("Floor 7"));
     }
 
     #[test]
     fn maze_rows_unchanged_after_status_bar() {
         let maze = small_maze();
-        let output = render_to_string(&maze, maze.start, 0.0, 60.0);
+        let output = render_to_string(&maze, maze.start, 1, 0.0, 60.0);
         let lines: Vec<&str> = output.lines().collect();
-        // Maze content starts at line 1
         assert_eq!(lines[1], "###");
         assert_eq!(lines[2], "#@#");
         assert_eq!(lines[3], "#E#");
@@ -247,19 +302,16 @@ mod tests {
 
     #[test]
     fn timer_urgency_white() {
-        // > 25% remaining
         assert_eq!(timer_urgency(10.0, 100.0), TimerUrgency::Normal);
     }
 
     #[test]
     fn timer_urgency_yellow() {
-        // 10-25% remaining (80% elapsed of 100 = 20% remaining)
         assert_eq!(timer_urgency(80.0, 100.0), TimerUrgency::Warning);
     }
 
     #[test]
     fn timer_urgency_red() {
-        // < 10% remaining (95% elapsed)
         assert_eq!(timer_urgency(95.0, 100.0), TimerUrgency::Critical);
     }
 }

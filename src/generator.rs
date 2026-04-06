@@ -4,16 +4,30 @@ use rand::prelude::IndexedRandom;
 use rand::rngs::StdRng;
 
 pub trait MazeGenerator {
-    fn generate(&self, width: usize, height: usize, seed: Option<u64>) -> Maze;
+    fn generate(
+        &self,
+        width: usize,
+        height: usize,
+        seed: Option<u64>,
+        start: Option<(usize, usize)>,
+    ) -> Maze;
 }
 
 pub struct RecursiveBacktracker;
 
 impl MazeGenerator for RecursiveBacktracker {
-    fn generate(&self, width: usize, height: usize, seed: Option<u64>) -> Maze {
+    fn generate(
+        &self,
+        width: usize,
+        height: usize,
+        seed: Option<u64>,
+        start: Option<(usize, usize)>,
+    ) -> Maze {
         // Ensure odd dimensions so walls/paths align on even/odd indices
         let width = if width % 2 == 0 { width + 1 } else { width };
         let height = if height % 2 == 0 { height + 1 } else { height };
+
+        let (sx, sy) = start.unwrap_or((1, 1));
 
         let mut grid = vec![vec![Tile::Wall; width]; height];
         let mut rng = match seed {
@@ -21,9 +35,9 @@ impl MazeGenerator for RecursiveBacktracker {
             None => StdRng::from_rng(&mut rand::rng()),
         };
 
-        // Start carving from (1, 1)
-        grid[1][1] = Tile::Path;
-        let mut stack = vec![(1usize, 1usize)];
+        // Start carving from the start position
+        grid[sy][sx] = Tile::Path;
+        let mut stack = vec![(sx, sy)];
 
         while let Some(&(cx, cy)) = stack.last() {
             let mut neighbors = Vec::new();
@@ -55,34 +69,57 @@ impl MazeGenerator for RecursiveBacktracker {
             }
         }
 
-        // Place start at (1, 1)
-        grid[1][1] = Tile::Start;
+        // Place start tile
+        grid[sy][sx] = Tile::Start;
 
-        // Place exit at bottom-right-most traversable cell
-        let (ex, ey) = find_bottom_right_path(&grid, width, height);
+        // Place exit at farthest reachable point from start
+        let (ex, ey) = farthest_reachable(&grid, (sx, sy), width, height);
         grid[ey][ex] = Tile::Exit;
 
         Maze {
             grid,
             width,
             height,
-            start: (1, 1),
+            start: (sx, sy),
             exit: (ex, ey),
         }
     }
 }
 
-fn find_bottom_right_path(grid: &[Vec<Tile>], width: usize, height: usize) -> (usize, usize) {
-    // Search from bottom-right, scanning right-to-left, bottom-to-top
-    for y in (0..height).rev() {
-        for x in (0..width).rev() {
-            if grid[y][x] == Tile::Path {
-                return (x, y);
+fn farthest_reachable(
+    grid: &[Vec<Tile>],
+    start: (usize, usize),
+    width: usize,
+    height: usize,
+) -> (usize, usize) {
+    use std::collections::VecDeque;
+
+    let mut visited = vec![vec![false; width]; height];
+    let mut queue = VecDeque::new();
+    let (sx, sy) = start;
+    visited[sy][sx] = true;
+    queue.push_back((sx, sy));
+    let mut farthest = start;
+
+    while let Some((x, y)) = queue.pop_front() {
+        farthest = (x, y);
+        for (dx, dy) in [(0i32, -1i32), (0, 1), (-1, 0), (1, 0)] {
+            let nx = x as i32 + dx;
+            let ny = y as i32 + dy;
+            if nx >= 0 && ny >= 0 {
+                let (nx, ny) = (nx as usize, ny as usize);
+                if nx < width
+                    && ny < height
+                    && !visited[ny][nx]
+                    && matches!(grid[ny][nx], Tile::Path | Tile::Start)
+                {
+                    visited[ny][nx] = true;
+                    queue.push_back((nx, ny));
+                }
             }
         }
     }
-    // Fallback (should never happen with a valid maze)
-    (width - 2, height - 2)
+    farthest
 }
 
 #[cfg(test)]
@@ -93,7 +130,7 @@ mod tests {
     #[test]
     fn generates_maze_with_correct_dimensions() {
         let generator = RecursiveBacktracker;
-        let maze = generator.generate(21, 21, Some(42));
+        let maze = generator.generate(21, 21, Some(42), None);
         assert_eq!(maze.width, 21);
         assert_eq!(maze.height, 21);
         assert_eq!(maze.grid.len(), 21);
@@ -103,7 +140,7 @@ mod tests {
     #[test]
     fn has_exactly_one_start_and_one_exit() {
         let generator = RecursiveBacktracker;
-        let maze = generator.generate(21, 21, Some(42));
+        let maze = generator.generate(21, 21, Some(42), None);
         let mut starts = 0;
         let mut exits = 0;
         for row in &maze.grid {
@@ -122,25 +159,35 @@ mod tests {
     #[test]
     fn start_is_at_1_1() {
         let generator = RecursiveBacktracker;
-        let maze = generator.generate(21, 21, Some(42));
+        let maze = generator.generate(21, 21, Some(42), None);
         assert_eq!(maze.start, (1, 1));
         assert_eq!(maze.grid[1][1], Tile::Start);
     }
 
     #[test]
-    fn exit_is_near_bottom_right() {
+    fn exit_is_farthest_from_start() {
         let generator = RecursiveBacktracker;
-        let maze = generator.generate(21, 21, Some(42));
-        let (ex, ey) = maze.exit;
-        // Exit should be in the bottom-right quadrant
-        assert!(ex > maze.width / 2, "exit x={ex} should be past midpoint");
-        assert!(ey > maze.height / 2, "exit y={ey} should be past midpoint");
+        let maze = generator.generate(21, 21, Some(42), None);
+        // BFS from start to find the actual farthest point
+        let distances = bfs_distances(&maze, maze.start);
+        let exit_dist = distances[maze.exit.1][maze.exit.0].unwrap();
+        // No traversable cell should be farther than the exit
+        for y in 0..maze.height {
+            for x in 0..maze.width {
+                if let Some(d) = distances[y][x] {
+                    assert!(
+                        d <= exit_dist,
+                        "cell ({x}, {y}) at distance {d} is farther than exit at distance {exit_dist}"
+                    );
+                }
+            }
+        }
     }
 
     #[test]
     fn maze_is_solvable() {
         let generator = RecursiveBacktracker;
-        let maze = generator.generate(21, 21, Some(42));
+        let maze = generator.generate(21, 21, Some(42), None);
         assert!(
             bfs_reachable(&maze, maze.start, maze.exit),
             "exit must be reachable from start"
@@ -150,7 +197,7 @@ mod tests {
     #[test]
     fn all_path_cells_reachable() {
         let generator = RecursiveBacktracker;
-        let maze = generator.generate(21, 21, Some(42));
+        let maze = generator.generate(21, 21, Some(42), None);
         let reachable = bfs_all_reachable(&maze, maze.start);
         for y in 0..maze.height {
             for x in 0..maze.width {
@@ -167,8 +214,8 @@ mod tests {
     #[test]
     fn same_seed_produces_identical_maze() {
         let generator = RecursiveBacktracker;
-        let maze1 = generator.generate(21, 21, Some(123));
-        let maze2 = generator.generate(21, 21, Some(123));
+        let maze1 = generator.generate(21, 21, Some(123), None);
+        let maze2 = generator.generate(21, 21, Some(123), None);
         assert_eq!(maze1.grid, maze2.grid);
         assert_eq!(maze1.start, maze2.start);
         assert_eq!(maze1.exit, maze2.exit);
@@ -177,15 +224,15 @@ mod tests {
     #[test]
     fn different_seeds_produce_different_mazes() {
         let generator = RecursiveBacktracker;
-        let maze1 = generator.generate(21, 21, Some(1));
-        let maze2 = generator.generate(21, 21, Some(2));
+        let maze1 = generator.generate(21, 21, Some(1), None);
+        let maze2 = generator.generate(21, 21, Some(2), None);
         assert_ne!(maze1.grid, maze2.grid);
     }
 
     #[test]
     fn even_dimensions_rounded_to_odd() {
         let generator = RecursiveBacktracker;
-        let maze = generator.generate(20, 20, Some(42));
+        let maze = generator.generate(20, 20, Some(42), None);
         assert_eq!(maze.width, 21);
         assert_eq!(maze.height, 21);
     }
@@ -193,7 +240,7 @@ mod tests {
     #[test]
     fn outer_border_is_all_walls() {
         let generator = RecursiveBacktracker;
-        let maze = generator.generate(21, 21, Some(42));
+        let maze = generator.generate(21, 21, Some(42), None);
         for x in 0..maze.width {
             assert_eq!(maze.grid[0][x], Tile::Wall, "top border at x={x}");
             assert_eq!(
@@ -210,6 +257,69 @@ mod tests {
                 "right border at y={y}"
             );
         }
+    }
+
+    #[test]
+    fn custom_start_position() {
+        let generator = RecursiveBacktracker;
+        let maze = generator.generate(21, 21, Some(42), Some((5, 5)));
+        assert_eq!(maze.start, (5, 5));
+        assert_eq!(maze.grid[5][5], Tile::Start);
+    }
+
+    #[test]
+    fn custom_start_maze_is_solvable() {
+        let generator = RecursiveBacktracker;
+        let maze = generator.generate(21, 21, Some(42), Some((5, 5)));
+        assert!(
+            bfs_reachable(&maze, maze.start, maze.exit),
+            "exit must be reachable from custom start"
+        );
+    }
+
+    #[test]
+    fn custom_start_all_cells_reachable() {
+        let generator = RecursiveBacktracker;
+        let maze = generator.generate(21, 21, Some(42), Some((5, 5)));
+        let reachable = bfs_all_reachable(&maze, maze.start);
+        for y in 0..maze.height {
+            for x in 0..maze.width {
+                if matches!(maze.grid[y][x], Tile::Path | Tile::Start | Tile::Exit) {
+                    assert!(
+                        reachable[y][x],
+                        "cell ({x}, {y}) should be reachable from custom start"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn custom_start_exit_is_farthest() {
+        let generator = RecursiveBacktracker;
+        let maze = generator.generate(21, 21, Some(42), Some((5, 5)));
+        let distances = bfs_distances(&maze, maze.start);
+        let exit_dist = distances[maze.exit.1][maze.exit.0].unwrap();
+        for y in 0..maze.height {
+            for x in 0..maze.width {
+                if let Some(d) = distances[y][x] {
+                    assert!(
+                        d <= exit_dist,
+                        "cell ({x}, {y}) at distance {d} is farther than exit at distance {exit_dist}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn same_seed_and_start_produces_identical_maze() {
+        let generator = RecursiveBacktracker;
+        let maze1 = generator.generate(21, 21, Some(123), Some((3, 7)));
+        let maze2 = generator.generate(21, 21, Some(123), Some((3, 7)));
+        assert_eq!(maze1.grid, maze2.grid);
+        assert_eq!(maze1.start, maze2.start);
+        assert_eq!(maze1.exit, maze2.exit);
     }
 
     // BFS helpers for tests
@@ -242,5 +352,32 @@ mod tests {
             }
         }
         visited
+    }
+
+    fn bfs_distances(maze: &Maze, from: (usize, usize)) -> Vec<Vec<Option<usize>>> {
+        let mut distances = vec![vec![None; maze.width]; maze.height];
+        let mut queue = VecDeque::new();
+        distances[from.1][from.0] = Some(0);
+        queue.push_back(from);
+
+        while let Some((x, y)) = queue.pop_front() {
+            let dist = distances[y][x].unwrap();
+            for (dx, dy) in [(0i32, -1i32), (0, 1), (-1, 0), (1, 0)] {
+                let nx = x as i32 + dx;
+                let ny = y as i32 + dy;
+                if nx >= 0 && ny >= 0 {
+                    let (nx, ny) = (nx as usize, ny as usize);
+                    if nx < maze.width
+                        && ny < maze.height
+                        && distances[ny][nx].is_none()
+                        && maze.is_traversable(nx, ny)
+                    {
+                        distances[ny][nx] = Some(dist + 1);
+                        queue.push_back((nx, ny));
+                    }
+                }
+            }
+        }
+        distances
     }
 }
