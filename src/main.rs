@@ -12,6 +12,8 @@ use crossterm::{cursor, execute};
 
 use game::{Direction, GameState, GameStatus};
 use generator::{MazeGenerator, RecursiveBacktracker};
+use rand::SeedableRng;
+use rand::rngs::StdRng;
 
 fn main() -> io::Result<()> {
     // Set panic hook to restore terminal before unwinding
@@ -41,6 +43,8 @@ fn main() -> io::Result<()> {
     loop {
         // Generate maze (first floor uses default start, subsequent floors use previous exit)
         let mut maze = generator.generate(41, 21, None, start_pos);
+        let mut rng = StdRng::from_rng(&mut rand::rng());
+        maze.carve_rooms(3, 3, 5, &mut rng);
         maze.place_exit();
 
         // Compute max time from solution path length
