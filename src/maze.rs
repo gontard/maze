@@ -64,6 +64,16 @@ impl Maze {
         self.exit = (ex, ey);
     }
 
+    pub fn carve_rooms(
+        &mut self,
+        count: usize,
+        min_size: usize,
+        max_size: usize,
+        rng: &mut impl rand::Rng,
+    ) {
+        todo!()
+    }
+
     pub fn solve(&self) -> Option<usize> {
         use std::collections::VecDeque;
 
@@ -100,6 +110,10 @@ impl Maze {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::generator::{MazeGenerator, RecursiveBacktracker};
+    use rand::SeedableRng;
+    use rand::rngs::StdRng;
+    use std::collections::VecDeque;
 
     fn sample_maze() -> Maze {
         // 3x3 maze:
@@ -201,6 +215,160 @@ mod tests {
         };
         // Shortest path: (1,1)->(2,1)->(3,1)->(3,2)->(3,3) = 4 steps
         assert_eq!(maze.solve(), Some(4));
+    }
+
+    fn generated_maze(seed: u64) -> Maze {
+        let generator = RecursiveBacktracker;
+        generator.generate(21, 21, Some(seed), None)
+    }
+
+    fn bfs_all_reachable(maze: &Maze, from: (usize, usize)) -> Vec<Vec<bool>> {
+        let mut visited = vec![vec![false; maze.width]; maze.height];
+        let mut queue = VecDeque::new();
+        visited[from.1][from.0] = true;
+        queue.push_back(from);
+
+        while let Some((x, y)) = queue.pop_front() {
+            for (dx, dy) in [(0i32, -1i32), (0, 1), (-1, 0), (1, 0)] {
+                let nx = x as i32 + dx;
+                let ny = y as i32 + dy;
+                if nx >= 0 && ny >= 0 {
+                    let (nx, ny) = (nx as usize, ny as usize);
+                    if nx < maze.width
+                        && ny < maze.height
+                        && !visited[ny][nx]
+                        && maze.is_traversable(nx, ny)
+                    {
+                        visited[ny][nx] = true;
+                        queue.push_back((nx, ny));
+                    }
+                }
+            }
+        }
+        visited
+    }
+
+    #[test]
+    fn carve_rooms_only_converts_walls_to_paths() {
+        let mut maze = generated_maze(42);
+        let before: Vec<Vec<Tile>> = maze.grid.clone();
+        let mut rng = StdRng::seed_from_u64(99);
+        maze.carve_rooms(5, 3, 5, &mut rng);
+
+        for y in 0..maze.height {
+            for x in 0..maze.width {
+                let old = before[y][x];
+                let new = maze.grid[y][x];
+                match old {
+                    Tile::Wall => assert!(
+                        new == Tile::Wall || new == Tile::Path,
+                        "wall at ({x}, {y}) became {new:?}"
+                    ),
+                    Tile::Path | Tile::Start => assert_eq!(
+                        old, new,
+                        "non-wall tile at ({x}, {y}) changed from {old:?} to {new:?}"
+                    ),
+                    Tile::Exit => {} // no exit placed yet
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn carve_rooms_preserves_border() {
+        let mut maze = generated_maze(42);
+        let mut rng = StdRng::seed_from_u64(99);
+        maze.carve_rooms(5, 3, 5, &mut rng);
+
+        for x in 0..maze.width {
+            assert_eq!(maze.grid[0][x], Tile::Wall, "top border at x={x}");
+            assert_eq!(
+                maze.grid[maze.height - 1][x],
+                Tile::Wall,
+                "bottom border at x={x}"
+            );
+        }
+        for y in 0..maze.height {
+            assert_eq!(maze.grid[y][0], Tile::Wall, "left border at y={y}");
+            assert_eq!(
+                maze.grid[y][maze.width - 1],
+                Tile::Wall,
+                "right border at y={y}"
+            );
+        }
+    }
+
+    #[test]
+    fn carve_rooms_maze_remains_solvable() {
+        let mut maze = generated_maze(42);
+        let mut rng = StdRng::seed_from_u64(99);
+        maze.carve_rooms(5, 3, 5, &mut rng);
+        maze.place_exit();
+        assert!(maze.solve().is_some(), "maze must be solvable after room carving");
+    }
+
+    #[test]
+    fn carve_rooms_all_cells_reachable() {
+        let mut maze = generated_maze(42);
+        let mut rng = StdRng::seed_from_u64(99);
+        maze.carve_rooms(5, 3, 5, &mut rng);
+        maze.place_exit();
+        let reachable = bfs_all_reachable(&maze, maze.start);
+        for y in 0..maze.height {
+            for x in 0..maze.width {
+                if matches!(maze.grid[y][x], Tile::Path | Tile::Start | Tile::Exit) {
+                    assert!(
+                        reachable[y][x],
+                        "cell ({x}, {y}) should be reachable after room carving"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn carve_rooms_deterministic_with_same_seed() {
+        let mut maze1 = generated_maze(42);
+        let mut rng1 = StdRng::seed_from_u64(99);
+        maze1.carve_rooms(5, 3, 5, &mut rng1);
+
+        let mut maze2 = generated_maze(42);
+        let mut rng2 = StdRng::seed_from_u64(99);
+        maze2.carve_rooms(5, 3, 5, &mut rng2);
+
+        assert_eq!(maze1.grid, maze2.grid);
+    }
+
+    #[test]
+    fn carve_rooms_changes_some_walls_to_paths() {
+        let mut maze = generated_maze(42);
+        let walls_before: usize = maze
+            .grid
+            .iter()
+            .flatten()
+            .filter(|t| **t == Tile::Wall)
+            .count();
+        let mut rng = StdRng::seed_from_u64(99);
+        maze.carve_rooms(5, 3, 5, &mut rng);
+        let walls_after: usize = maze
+            .grid
+            .iter()
+            .flatten()
+            .filter(|t| **t == Tile::Wall)
+            .count();
+        assert!(
+            walls_after < walls_before,
+            "room carving should remove some walls"
+        );
+    }
+
+    #[test]
+    fn carve_rooms_zero_count_changes_nothing() {
+        let mut maze = generated_maze(42);
+        let before = maze.grid.clone();
+        let mut rng = StdRng::seed_from_u64(99);
+        maze.carve_rooms(0, 3, 5, &mut rng);
+        assert_eq!(maze.grid, before);
     }
 
     #[test]
