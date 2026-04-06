@@ -49,8 +49,8 @@ The system SHALL implement the recursive backtracker (randomized DFS) algorithm 
 - **WHEN** a maze is generated with the recursive backtracker
 - **THEN** every `Path`, `Start`, and `Exit` tile is reachable from every other such tile
 
-### Requirement: Start and exit placement
-The system SHALL place the `Start` tile at the specified start position (defaulting to (1,1)) and the `Exit` tile at the farthest reachable point from the start.
+### Requirement: Start placement in generator
+The system SHALL place the `Start` tile at the specified start position (defaulting to (1,1)) during generation. The generator does NOT place the exit.
 
 #### Scenario: Start is at specified position
 - **WHEN** a maze is generated with start position (x, y)
@@ -60,6 +60,20 @@ The system SHALL place the `Start` tile at the specified start position (default
 - **WHEN** a maze is generated with no start position specified
 - **THEN** the `Start` tile is at position (1, 1) in the grid
 
-#### Scenario: Exit is farthest reachable point
-- **WHEN** a maze is generated with start position S
-- **THEN** the `Exit` tile is placed at the traversable cell with the maximum BFS distance from S
+#### Scenario: Generator returns maze without exit
+- **WHEN** `generate()` is called
+- **THEN** the returned maze has a `Start` tile but no `Exit` tile in the grid
+
+### Requirement: Exit placement via place_exit
+The system SHALL place the `Exit` tile via a separate `Maze::place_exit()` method at the farthest reachable point from the start.
+
+#### Scenario: place_exit sets exit at farthest point
+- **GIVEN** a maze with corridors (and optionally rooms) but no exit
+- **WHEN** `maze.place_exit()` is called
+- **THEN** the `Exit` tile is placed at the traversable cell with maximum BFS distance from start
+- **AND** `maze.exit` is updated to that position
+
+#### Scenario: place_exit works after room carving
+- **GIVEN** a maze that has had rooms carved into it
+- **WHEN** `maze.place_exit()` is called
+- **THEN** the exit is at the farthest point considering the room shortcuts
