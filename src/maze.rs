@@ -30,6 +30,40 @@ impl Maze {
         )
     }
 
+    pub fn place_exit(&mut self) {
+        use std::collections::VecDeque;
+
+        let mut visited = vec![vec![false; self.width]; self.height];
+        let mut queue = VecDeque::new();
+        let (sx, sy) = self.start;
+        visited[sy][sx] = true;
+        queue.push_back((sx, sy));
+        let mut farthest = self.start;
+
+        while let Some((x, y)) = queue.pop_front() {
+            farthest = (x, y);
+            for (dx, dy) in [(0i32, -1i32), (0, 1), (-1, 0), (1, 0)] {
+                let nx = x as i32 + dx;
+                let ny = y as i32 + dy;
+                if nx >= 0 && ny >= 0 {
+                    let (nx, ny) = (nx as usize, ny as usize);
+                    if nx < self.width
+                        && ny < self.height
+                        && !visited[ny][nx]
+                        && matches!(self.grid[ny][nx], Tile::Path | Tile::Start)
+                    {
+                        visited[ny][nx] = true;
+                        queue.push_back((nx, ny));
+                    }
+                }
+            }
+        }
+
+        let (ex, ey) = farthest;
+        self.grid[ey][ex] = Tile::Exit;
+        self.exit = (ex, ey);
+    }
+
     pub fn solve(&self) -> Option<usize> {
         use std::collections::VecDeque;
 

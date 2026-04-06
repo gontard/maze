@@ -40,7 +40,8 @@ fn main() -> io::Result<()> {
     // Level loop: each iteration is one floor of the tower
     loop {
         // Generate maze (first floor uses default start, subsequent floors use previous exit)
-        let maze = generator.generate(41, 21, None, start_pos);
+        let mut maze = generator.generate(41, 21, None, start_pos);
+        maze.place_exit();
 
         // Compute max time from solution path length
         let path_length = maze.solve().expect("generated maze must be solvable");

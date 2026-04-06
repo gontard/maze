@@ -72,54 +72,14 @@ impl MazeGenerator for RecursiveBacktracker {
         // Place start tile
         grid[sy][sx] = Tile::Start;
 
-        // Place exit at farthest reachable point from start
-        let (ex, ey) = farthest_reachable(&grid, (sx, sy), width, height);
-        grid[ey][ex] = Tile::Exit;
-
         Maze {
             grid,
             width,
             height,
             start: (sx, sy),
-            exit: (ex, ey),
+            exit: (sx, sy),
         }
     }
-}
-
-fn farthest_reachable(
-    grid: &[Vec<Tile>],
-    start: (usize, usize),
-    width: usize,
-    height: usize,
-) -> (usize, usize) {
-    use std::collections::VecDeque;
-
-    let mut visited = vec![vec![false; width]; height];
-    let mut queue = VecDeque::new();
-    let (sx, sy) = start;
-    visited[sy][sx] = true;
-    queue.push_back((sx, sy));
-    let mut farthest = start;
-
-    while let Some((x, y)) = queue.pop_front() {
-        farthest = (x, y);
-        for (dx, dy) in [(0i32, -1i32), (0, 1), (-1, 0), (1, 0)] {
-            let nx = x as i32 + dx;
-            let ny = y as i32 + dy;
-            if nx >= 0 && ny >= 0 {
-                let (nx, ny) = (nx as usize, ny as usize);
-                if nx < width
-                    && ny < height
-                    && !visited[ny][nx]
-                    && matches!(grid[ny][nx], Tile::Path | Tile::Start)
-                {
-                    visited[ny][nx] = true;
-                    queue.push_back((nx, ny));
-                }
-            }
-        }
-    }
-    farthest
 }
 
 #[cfg(test)]
@@ -140,7 +100,8 @@ mod tests {
     #[test]
     fn has_exactly_one_start_and_one_exit() {
         let generator = RecursiveBacktracker;
-        let maze = generator.generate(21, 21, Some(42), None);
+        let mut maze = generator.generate(21, 21, Some(42), None);
+        maze.place_exit();
         let mut starts = 0;
         let mut exits = 0;
         for row in &maze.grid {
@@ -167,7 +128,8 @@ mod tests {
     #[test]
     fn exit_is_farthest_from_start() {
         let generator = RecursiveBacktracker;
-        let maze = generator.generate(21, 21, Some(42), None);
+        let mut maze = generator.generate(21, 21, Some(42), None);
+        maze.place_exit();
         // BFS from start to find the actual farthest point
         let distances = bfs_distances(&maze, maze.start);
         let exit_dist = distances[maze.exit.1][maze.exit.0].unwrap();
@@ -187,7 +149,8 @@ mod tests {
     #[test]
     fn maze_is_solvable() {
         let generator = RecursiveBacktracker;
-        let maze = generator.generate(21, 21, Some(42), None);
+        let mut maze = generator.generate(21, 21, Some(42), None);
+        maze.place_exit();
         assert!(
             bfs_reachable(&maze, maze.start, maze.exit),
             "exit must be reachable from start"
@@ -197,7 +160,8 @@ mod tests {
     #[test]
     fn all_path_cells_reachable() {
         let generator = RecursiveBacktracker;
-        let maze = generator.generate(21, 21, Some(42), None);
+        let mut maze = generator.generate(21, 21, Some(42), None);
+        maze.place_exit();
         let reachable = bfs_all_reachable(&maze, maze.start);
         for y in 0..maze.height {
             for x in 0..maze.width {
@@ -270,7 +234,8 @@ mod tests {
     #[test]
     fn custom_start_maze_is_solvable() {
         let generator = RecursiveBacktracker;
-        let maze = generator.generate(21, 21, Some(42), Some((5, 5)));
+        let mut maze = generator.generate(21, 21, Some(42), Some((5, 5)));
+        maze.place_exit();
         assert!(
             bfs_reachable(&maze, maze.start, maze.exit),
             "exit must be reachable from custom start"
@@ -280,7 +245,8 @@ mod tests {
     #[test]
     fn custom_start_all_cells_reachable() {
         let generator = RecursiveBacktracker;
-        let maze = generator.generate(21, 21, Some(42), Some((5, 5)));
+        let mut maze = generator.generate(21, 21, Some(42), Some((5, 5)));
+        maze.place_exit();
         let reachable = bfs_all_reachable(&maze, maze.start);
         for y in 0..maze.height {
             for x in 0..maze.width {
@@ -297,7 +263,8 @@ mod tests {
     #[test]
     fn custom_start_exit_is_farthest() {
         let generator = RecursiveBacktracker;
-        let maze = generator.generate(21, 21, Some(42), Some((5, 5)));
+        let mut maze = generator.generate(21, 21, Some(42), Some((5, 5)));
+        maze.place_exit();
         let distances = bfs_distances(&maze, maze.start);
         let exit_dist = distances[maze.exit.1][maze.exit.0].unwrap();
         for y in 0..maze.height {
