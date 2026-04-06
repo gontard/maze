@@ -25,11 +25,15 @@ The system SHALL place the player at the `Start` tile position when the game beg
 - **THEN** the player is positioned on the `Start` tile
 
 ### Requirement: Win condition
-The system SHALL detect when the player reaches the `Exit` tile and end the game with a victory message.
+The system SHALL detect when the player reaches the `Exit` tile and transition to the next floor rather than ending the game.
 
 #### Scenario: Player reaches exit
 - **WHEN** the player moves onto the `Exit` tile
-- **THEN** the game ends and displays a victory message
+- **THEN** a new floor is generated and gameplay continues
+
+#### Scenario: Player reaches exit on any floor
+- **WHEN** the player reaches the exit on floor N
+- **THEN** floor N+1 begins with a new maze, fresh timer, and the player at the same position
 
 ### Requirement: Timer
 The system SHALL track elapsed time from game start, enforce a max time limit, and display the elapsed time upon victory or loss.

@@ -41,11 +41,15 @@ The system SHALL define all tile-to-character mappings in the renderer module, s
 - **THEN** only the renderer module needs a new character mapping to display it
 
 ### Requirement: Status bar rendering
-The system SHALL render a status bar on the first row of the terminal, above the maze grid.
+The system SHALL render a status bar on the first row of the terminal, above the maze grid, showing the floor number and countdown timer.
 
 #### Scenario: Status bar position
 - **WHEN** the maze is rendered
 - **THEN** the status bar occupies row 0 and the maze grid starts at row 1
+
+#### Scenario: Status bar contains floor number
+- **WHEN** the status bar is rendered on floor N
+- **THEN** it displays "Floor N" left-aligned within the maze's display width
 
 #### Scenario: Status bar contains timer
 - **WHEN** the status bar is rendered

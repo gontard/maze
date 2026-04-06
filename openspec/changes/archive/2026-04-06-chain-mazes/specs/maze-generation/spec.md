@@ -1,4 +1,4 @@
-## ADDED Requirements
+## MODIFIED Requirements
 
 ### Requirement: Maze generator trait
 The system SHALL define a `MazeGenerator` trait with a method that accepts width, height, an optional random seed, and an optional start position, and returns a `Maze`.
@@ -19,35 +19,6 @@ The system SHALL define a `MazeGenerator` trait with a method that accepts width
 #### Scenario: Generate maze with no start position
 - **WHEN** a generator is invoked with no start position (None)
 - **THEN** the `Start` tile is placed at (1, 1)
-
-### Requirement: Maze structure
-The system SHALL represent a maze as a 2D grid of `Tile` enum values with exactly one `Start` tile and one `Exit` tile.
-
-#### Scenario: Maze has start and exit
-- **WHEN** a maze is generated
-- **THEN** the grid contains exactly one `Start` tile and exactly one `Exit` tile
-
-#### Scenario: Maze is solvable
-- **WHEN** a maze is generated
-- **THEN** there EXISTS a path of adjacent `Path`/`Start`/`Exit` tiles connecting `Start` to `Exit`
-
-### Requirement: Tile types
-The system SHALL define a `Tile` enum with at least the variants: `Wall`, `Path`, `Start`, `Exit`.
-
-#### Scenario: Wall cells block movement
-- **WHEN** a tile is `Wall`
-- **THEN** it is not traversable
-
-#### Scenario: Path cells allow movement
-- **WHEN** a tile is `Path`, `Start`, or `Exit`
-- **THEN** it is traversable
-
-### Requirement: Recursive backtracker algorithm
-The system SHALL implement the recursive backtracker (randomized DFS) algorithm as a `MazeGenerator`.
-
-#### Scenario: All path cells are reachable
-- **WHEN** a maze is generated with the recursive backtracker
-- **THEN** every `Path`, `Start`, and `Exit` tile is reachable from every other such tile
 
 ### Requirement: Start and exit placement
 The system SHALL place the `Start` tile at the specified start position (defaulting to (1,1)) and the `Exit` tile at the farthest reachable point from the start.

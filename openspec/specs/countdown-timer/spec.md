@@ -28,11 +28,16 @@ The system SHALL end the game with a loss when elapsed time exceeds the max allo
 - **THEN** movement inputs are ignored
 
 ### Requirement: Max time derived from solution path length
-The system SHALL compute the max allowed time as the maze's shortest solution path length multiplied by 1.5 seconds.
+The system SHALL compute the max allowed time as the current floor's maze shortest solution path length multiplied by a time factor.
 
 #### Scenario: Max time calculation
-- **WHEN** a maze with shortest solution path of N steps is generated
-- **THEN** max allowed time is N × 1.5 seconds
+- **WHEN** a maze with shortest solution path of N steps is generated for a new floor
+- **THEN** max allowed time is recomputed based on that floor's maze
+
+#### Scenario: Timer resets on new floor
+- **WHEN** a new floor begins
+- **THEN** the elapsed time resets to zero
+- **AND** the max time is derived from the new maze's solution path
 
 ### Requirement: Timer color urgency
 The system SHALL change the timer color based on remaining time percentage.
