@@ -103,3 +103,39 @@ OpenSpec explore mode for design discussion, then propose for all artifacts, TDD
 ### What's next
 
 Potential features: increasing difficulty per floor (larger mazes, tighter timers), score system, fog of war, pause/resume.
+
+## Session 2026-04-06: Room Carving Modifier
+
+### What we built
+
+A composable room modifier that carves rectangular open areas into any generated maze. Rooms break up pure corridor layouts, creating landmarks and multi-exit decision points under time pressure.
+
+### Changes
+
+- **maze.rs** - New `Maze::place_exit()` method (BFS farthest-reachable, extracted from generator). New `Maze::carve_rooms()` method that carves random odd-aligned rectangles, converting walls to paths. Only removes walls — connectivity preserved by construction.
+- **generator.rs** - `RecursiveBacktracker::generate()` no longer places exit. Returns maze with `Start` tile only. Removed `farthest_reachable` (moved to `maze.rs`).
+- **main.rs** - Pipeline changed to `generate() -> carve_rooms(3, 3, 5) -> place_exit()`. Added `rand` imports for room RNG.
+
+### Key decisions made during exploration
+
+- **Room modifier (composable)** rather than rooms-first algorithm — rooms layer on top of any generation algorithm, keeping algorithm variety orthogonal to room carving.
+- **Exit placement extracted from generator** — modifiers change grid topology, so exit must be placed after all modifiers run. `place_exit()` became a separate `Maze` method.
+- **Rooms only remove walls** — key invariant that guarantees connectivity. Removing walls from a perfect maze can only add paths, never block them.
+- **Odd-aligned coordinates and sizes** — matches the maze grid structure where paths are on odd indices and walls on even.
+- **Count as attempts, not guarantees** — if a room doesn't fit (border constraint), it's skipped. Avoids infinite retry loops on small mazes.
+
+### Workflow
+
+OpenSpec explore mode for design discussion (algorithm comparison, room approaches, pipeline design), then propose for all artifacts, TDD for implementation. Refactored exit placement first as a safe commit (56 tests passing), then wrote 7 failing room tests, then implemented. 63 tests total (7 new: wall-to-path only, border integrity, solvability, reachability, determinism, wall count reduction, zero-count no-op).
+
+### Commits
+
+1. `0b9f92b` - Refactor: extract exit placement from generator into Maze::place_exit()
+2. `fd77fab` - Add failing tests for carve_rooms room modifier (TDD red phase)
+3. `2cb5a7d` - Implement carve_rooms room modifier
+4. `8a7e7fb` - Integrate room carving into game pipeline
+5. `62d30d5` - Archive add-rooms change and sync specs
+
+### What's next
+
+Potential features discussed during exploration: multiple generation algorithms (Kruskal's, Sidewinder — contrasting maze textures), fog of war, minimap, maze size scaling per floor, score system, animated wall dissolve.
