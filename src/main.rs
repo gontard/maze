@@ -11,9 +11,9 @@ use crossterm::terminal::{self, ClearType};
 use crossterm::{cursor, execute};
 
 use game::{Direction, GameState, GameStatus};
-use generator::{MazeGenerator, RecursiveBacktracker};
-use rand::SeedableRng;
+use generator::{Kruskal, MazeGenerator, Prim, RecursiveBacktracker};
 use rand::rngs::StdRng;
+use rand::{RngExt, SeedableRng};
 
 fn main() -> io::Result<()> {
     // Set panic hook to restore terminal before unwinding
@@ -34,16 +34,20 @@ fn main() -> io::Result<()> {
         cursor::MoveTo(0, 0)
     )?;
 
-    let generator = RecursiveBacktracker;
     let mut level: usize = 1;
     let mut start_pos: Option<(usize, usize)> = None;
     let mut final_status;
+    let mut rng = StdRng::from_rng(&mut rand::rng());
 
     // Level loop: each iteration is one floor of the tower
     loop {
-        // Generate maze (first floor uses default start, subsequent floors use previous exit)
-        let mut maze = generator.generate(41, 21, None, start_pos);
-        let mut rng = StdRng::from_rng(&mut rand::rng());
+        // Pick a random algorithm for this floor
+        let algo_index = rng.random_range(0..3u32);
+        let mut maze = match algo_index {
+            0 => RecursiveBacktracker.generate(41, 21, None, start_pos),
+            1 => Kruskal.generate(41, 21, None, start_pos),
+            _ => Prim.generate(41, 21, None, start_pos),
+        };
         maze.carve_rooms(3, 3, 5, &mut rng);
         maze.place_exit();
 
