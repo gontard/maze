@@ -139,3 +139,41 @@ OpenSpec explore mode for design discussion (algorithm comparison, room approach
 ### What's next
 
 Potential features discussed during exploration: multiple generation algorithms (Kruskal's, Sidewinder — contrasting maze textures), fog of war, minimap, maze size scaling per floor, score system, animated wall dissolve.
+
+## Session 2026-04-07: Multiple Maze Algorithms
+
+### What we built
+
+Two new maze generation algorithms — Kruskal's and Prim's — with random per-floor selection. Each floor now independently picks one of three algorithms (uniform random), giving visual and gameplay variety across the tower climb.
+
+### Changes
+
+- **generator.rs** - Added `Kruskal` and `Prim` structs implementing `MazeGenerator`. Extracted shared `init_maze()` and `finish_maze()` helpers from `RecursiveBacktracker` to avoid duplication. Added private `UnionFind` data structure for Kruskal's. 14 new tests (7 per algorithm: dimensions, reachability, solvability, borders, determinism, custom start).
+- **main.rs** - Replaced single `RecursiveBacktracker` with random selection via `rng.random_range(0..3)` match. Moved RNG creation before the floor loop so it persists across floors.
+- **CLAUDE.md** - New project-level config with `RUSTFLAGS="-D warnings"` pre-commit check (warnings-as-errors for CI readiness without blocking local dev).
+
+### Key decisions made during exploration
+
+- **Option C (no trait objects, no enum wrapper)** — the `MazeGenerator` trait provides the contract, a simple match provides the selection. No dynamic dispatch needed for 3 algorithms picked once per floor.
+- **No algorithm name on HUD** — explored displaying "Floor N — Algorithm" but "Recursive Backtracker" was too long for the 41-char status bar. Dropped the feature rather than abbreviating.
+- **Uniform random selection** — no weighting or difficulty progression for now. Keeps it simple, can revisit later.
+- **Warnings-as-errors via RUSTFLAGS** — caught an unused `name()` method after removing HUD display. Added `RUSTFLAGS="-D warnings"` as a pre-commit check rather than `#[deny(warnings)]` in code, which would be painful during TDD red phases.
+
+### Algorithm characteristics
+
+- **Recursive Backtracker** — long winding corridors, few dead ends, high "river" factor
+- **Kruskal's** — many short dead ends, branchy organic texture, uses union-find
+- **Prim's** — shorter corridors, radial growth pattern from start, frontier-based
+
+### Workflow
+
+OpenSpec explore mode for algorithm comparison and design (Option A/B/C trade-offs), then propose for artifacts, TDD for implementation. 77 tests total (14 new generator tests + removed 2 unused name tests, net +12 from previous 63, then +2 from CLAUDE.md session).
+
+### Commits
+
+1. `c326116` - Implement Kruskal's and Prim's maze algorithms with random per-floor selection
+2. `09640c1` - Add project CLAUDE.md with warnings-as-errors pre-commit check
+
+### What's next
+
+Potential features: algorithm name display (shorter names or wider maze), difficulty progression (algorithm weighting by floor), more algorithms (Eller's, Wilson's, Sidewinder), fog of war, minimap, score system.
