@@ -1,17 +1,14 @@
-mod game;
-mod generator;
-mod maze;
 mod renderer;
 
 use std::io;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind};
 use crossterm::terminal::{self, ClearType};
 use crossterm::{cursor, execute};
 
-use game::{Direction, GameState, GameStatus};
-use generator::{Kruskal, MazeGenerator, Prim, RecursiveBacktracker};
+use maze_core::game::{Direction, GameState, GameStatus};
+use maze_core::generator::{Kruskal, MazeGenerator, Prim, RecursiveBacktracker};
 use rand::rngs::StdRng;
 use rand::{RngExt, SeedableRng};
 
@@ -57,15 +54,11 @@ fn main() -> io::Result<()> {
 
         // Fresh game state for this floor
         let mut state = GameState::new_with_max_time(maze.start, max_time_secs);
+        let start_time = Instant::now();
 
         // Initial render
-        renderer::render(
-            &maze,
-            state.player,
-            level,
-            state.elapsed_secs(),
-            max_time_secs,
-        )?;
+        let elapsed = start_time.elapsed().as_secs_f64();
+        renderer::render(&maze, state.player, level, elapsed, max_time_secs)?;
 
         // Game loop (poll-based for continuous timer updates)
         loop {
@@ -94,19 +87,14 @@ fn main() -> io::Result<()> {
                 }
             }
 
-            state.check_timeout();
+            let elapsed = start_time.elapsed().as_secs_f64();
+            state.check_timeout(elapsed);
 
             if state.status != GameStatus::Playing {
                 break;
             }
 
-            renderer::render(
-                &maze,
-                state.player,
-                level,
-                state.elapsed_secs(),
-                max_time_secs,
-            )?;
+            renderer::render(&maze, state.player, level, elapsed, max_time_secs)?;
         }
 
         final_status = state.status;

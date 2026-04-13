@@ -1,5 +1,3 @@
-use std::time::Instant;
-
 use crate::maze::Maze;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -13,7 +11,6 @@ pub enum GameStatus {
 pub struct GameState {
     pub player: (usize, usize),
     pub status: GameStatus,
-    pub start_time: Instant,
     pub max_time_secs: f64,
 }
 
@@ -35,7 +32,6 @@ impl GameState {
         Self {
             player: start,
             status: GameStatus::Playing,
-            start_time: Instant::now(),
             max_time_secs,
         }
     }
@@ -62,18 +58,14 @@ impl GameState {
         }
     }
 
-    pub fn check_timeout(&mut self) {
-        if self.status == GameStatus::Playing && self.elapsed_secs() >= self.max_time_secs {
+    pub fn check_timeout(&mut self, elapsed_secs: f64) {
+        if self.status == GameStatus::Playing && elapsed_secs >= self.max_time_secs {
             self.status = GameStatus::Lost;
         }
     }
 
     pub fn quit(&mut self) {
         self.status = GameStatus::Quit;
-    }
-
-    pub fn elapsed_secs(&self) -> f64 {
-        self.start_time.elapsed().as_secs_f64()
     }
 }
 
@@ -83,12 +75,6 @@ mod tests {
     use crate::maze::Tile;
 
     fn test_maze() -> Maze {
-        // 5x5 maze with a simple path:
-        // W W W W W
-        // W S P P W
-        // W W W P W
-        // W P P E W
-        // W W W W W
         let grid = vec![
             vec![Tile::Wall, Tile::Wall, Tile::Wall, Tile::Wall, Tile::Wall],
             vec![Tile::Wall, Tile::Start, Tile::Path, Tile::Path, Tile::Wall],
@@ -125,7 +111,6 @@ mod tests {
     fn move_blocked_by_wall() {
         let maze = test_maze();
         let mut state = GameState::new(maze.start);
-        // Up from (1,1) is wall at (1,0)
         state.move_player(Direction::Up, &maze);
         assert_eq!(state.player, (1, 1));
     }
@@ -134,16 +119,14 @@ mod tests {
     fn move_blocked_by_boundary() {
         let maze = test_maze();
         let mut state = GameState::new(maze.start);
-        // Left from (1,1) is wall at (0,1) — but also test boundary
         state.move_player(Direction::Left, &maze);
-        assert_eq!(state.player, (1, 1)); // Wall blocks it
+        assert_eq!(state.player, (1, 1));
     }
 
     #[test]
     fn move_down_blocked_by_wall() {
         let maze = test_maze();
         let mut state = GameState::new(maze.start);
-        // Down from (1,1) is wall at (1,2)
         state.move_player(Direction::Down, &maze);
         assert_eq!(state.player, (1, 1));
     }
@@ -152,12 +135,10 @@ mod tests {
     fn win_condition_on_exit() {
         let maze = test_maze();
         let mut state = GameState::new(maze.start);
-        // Navigate: right, right, right (to 3,1), down (to 3,2), down (to 3,3 = exit)
-        // Wait — (3,1) is Path, (3,2) is Path, (3,3) is Exit
-        state.move_player(Direction::Right, &maze); // (2,1)
-        state.move_player(Direction::Right, &maze); // (3,1)
-        state.move_player(Direction::Down, &maze); // (3,2)
-        state.move_player(Direction::Down, &maze); // (3,3) = exit
+        state.move_player(Direction::Right, &maze);
+        state.move_player(Direction::Right, &maze);
+        state.move_player(Direction::Down, &maze);
+        state.move_player(Direction::Down, &maze);
         assert_eq!(state.player, (3, 3));
         assert_eq!(state.status, GameStatus::Won);
     }
@@ -171,10 +152,8 @@ mod tests {
         state.move_player(Direction::Down, &maze);
         state.move_player(Direction::Down, &maze);
         assert_eq!(state.status, GameStatus::Won);
-
-        // Try to move after winning
         state.move_player(Direction::Left, &maze);
-        assert_eq!(state.player, (3, 3)); // Still at exit
+        assert_eq!(state.player, (3, 3));
     }
 
     #[test]
@@ -191,7 +170,7 @@ mod tests {
         let mut state = GameState::new(maze.start);
         state.quit();
         state.move_player(Direction::Right, &maze);
-        assert_eq!(state.player, (1, 1)); // Didn't move
+        assert_eq!(state.player, (1, 1));
     }
 
     #[test]
@@ -206,41 +185,38 @@ mod tests {
     fn check_timeout_does_not_trigger_before_max_time() {
         let maze = test_maze();
         let mut state = GameState::new_with_max_time(maze.start, 9999.0);
-        state.check_timeout();
+        state.check_timeout(0.0);
         assert_eq!(state.status, GameStatus::Playing);
     }
 
     #[test]
     fn check_timeout_triggers_lost() {
         let maze = test_maze();
-        // Use a max time of 0 so it's already expired
-        let mut state = GameState::new_with_max_time(maze.start, 0.0);
-        state.check_timeout();
+        let mut state = GameState::new_with_max_time(maze.start, 10.0);
+        state.check_timeout(10.0);
         assert_eq!(state.status, GameStatus::Lost);
     }
 
     #[test]
     fn cannot_move_after_lost() {
         let maze = test_maze();
-        let mut state = GameState::new_with_max_time(maze.start, 0.0);
-        state.check_timeout();
+        let mut state = GameState::new_with_max_time(maze.start, 10.0);
+        state.check_timeout(10.0);
         assert_eq!(state.status, GameStatus::Lost);
         state.move_player(Direction::Right, &maze);
-        assert_eq!(state.player, (1, 1)); // Didn't move
+        assert_eq!(state.player, (1, 1));
     }
 
     #[test]
     fn check_timeout_no_effect_after_won() {
         let maze = test_maze();
-        let mut state = GameState::new_with_max_time(maze.start, 0.0);
-        // Win first
+        let mut state = GameState::new_with_max_time(maze.start, 10.0);
         state.move_player(Direction::Right, &maze);
         state.move_player(Direction::Right, &maze);
         state.move_player(Direction::Down, &maze);
         state.move_player(Direction::Down, &maze);
         assert_eq!(state.status, GameStatus::Won);
-        // Timeout should not override Won
-        state.check_timeout();
+        state.check_timeout(999.0);
         assert_eq!(state.status, GameStatus::Won);
     }
 }
