@@ -7,10 +7,10 @@ use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind};
 use crossterm::terminal::{self, ClearType};
 use crossterm::{cursor, execute};
 
+use maze_core::floor::generate_floor;
 use maze_core::game::{Direction, GameState, GameStatus};
-use maze_core::generator::{Kruskal, MazeGenerator, Prim, RecursiveBacktracker};
+use rand::SeedableRng;
 use rand::rngs::StdRng;
-use rand::{RngExt, SeedableRng};
 
 fn main() -> io::Result<()> {
     // Set panic hook to restore terminal before unwinding
@@ -38,19 +38,7 @@ fn main() -> io::Result<()> {
 
     // Level loop: each iteration is one floor of the tower
     loop {
-        // Pick a random algorithm for this floor
-        let algo_index = rng.random_range(0..3u32);
-        let mut maze = match algo_index {
-            0 => RecursiveBacktracker.generate(41, 21, None, start_pos),
-            1 => Kruskal.generate(41, 21, None, start_pos),
-            _ => Prim.generate(41, 21, None, start_pos),
-        };
-        maze.carve_rooms(3, 3, 5, &mut rng);
-        maze.place_exit();
-
-        // Compute max time from solution path length
-        let path_length = maze.solve().expect("generated maze must be solvable");
-        let max_time_secs = path_length as f64 * 0.375;
+        let (maze, max_time_secs) = generate_floor(&mut rng, start_pos);
 
         // Fresh game state for this floor
         let mut state = GameState::new_with_max_time(maze.start, max_time_secs);

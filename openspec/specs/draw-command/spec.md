@@ -1,11 +1,11 @@
 ## ADDED Requirements
 
 ### Requirement: DrawCommand enum
-The system SHALL define a `DrawCommand` enum in `maze-core` representing low-level rendering primitives. All rendering decisions SHALL be expressed as `Vec<DrawCommand>`.
+The system SHALL define a `DrawCommand` enum in `maze-core` representing low-level rendering primitives. All rendering decisions SHALL be expressed as `Vec<DrawCommand>`. The variants are: `Clear`, `DrawChar`, and `DrawText`.
 
-#### Scenario: Fill a rectangular area
-- **WHEN** the renderer needs to draw a filled rectangle
-- **THEN** it emits `DrawCommand::FillRect { x, y, width, height, color }`
+#### Scenario: Draw a character
+- **WHEN** the renderer needs to draw a single character at a grid position
+- **THEN** it emits `DrawCommand::DrawChar { x, y, ch, color }`
 
 #### Scenario: Draw text
 - **WHEN** the renderer needs to display text
@@ -41,5 +41,5 @@ The system SHALL provide a `render_frame` function in `maze-core` that takes gam
 The system SHALL use a grid-based coordinate system where (x, y) corresponds to maze tile positions (column, row). Backends translate grid coordinates to pixel or character positions.
 
 #### Scenario: Coordinate mapping
-- **WHEN** a `DrawCommand::FillRect { x: 3, y: 5, .. }` is emitted
+- **WHEN** a `DrawCommand::DrawChar { x: 3, y: 5, .. }` is emitted
 - **THEN** it represents maze tile at column 3, row 5

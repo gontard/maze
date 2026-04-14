@@ -58,7 +58,6 @@ pub fn render(
                     }
                 }
             }
-            DrawCommand::FillRect { .. } => {}
         }
     }
 

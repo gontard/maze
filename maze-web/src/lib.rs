@@ -3,12 +3,12 @@ mod renderer;
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use maze_core::floor::generate_floor;
 use maze_core::game::{Direction, GameState, GameStatus};
-use maze_core::generator::{Kruskal, MazeGenerator, Prim, RecursiveBacktracker};
 use maze_core::maze::Maze;
 use maze_core::render;
+use rand::SeedableRng;
 use rand::rngs::StdRng;
-use rand::{RngExt, SeedableRng};
 use wasm_bindgen::prelude::*;
 
 struct Game {
@@ -26,7 +26,7 @@ impl Game {
         let mut rng = StdRng::from_rng(&mut rand::rng());
         let start_pos = None;
         let level = 1;
-        let (maze, max_time_secs) = Self::generate_floor(&mut rng, start_pos);
+        let (maze, max_time_secs) = generate_floor(&mut rng, start_pos);
         let state = GameState::new_with_max_time(maze.start, max_time_secs);
         let start_time = performance_now();
 
@@ -41,25 +41,10 @@ impl Game {
         }
     }
 
-    fn generate_floor(rng: &mut StdRng, start_pos: Option<(usize, usize)>) -> (Maze, f64) {
-        let algo_index = rng.random_range(0..3u32);
-        let mut maze = match algo_index {
-            0 => RecursiveBacktracker.generate(41, 21, None, start_pos),
-            1 => Kruskal.generate(41, 21, None, start_pos),
-            _ => Prim.generate(41, 21, None, start_pos),
-        };
-        maze.carve_rooms(3, 3, 5, rng);
-        maze.place_exit();
-
-        let path_length = maze.solve().expect("generated maze must be solvable");
-        let max_time_secs = path_length as f64 * 0.375;
-        (maze, max_time_secs)
-    }
-
     fn advance_floor(&mut self) {
         self.start_pos = Some(self.maze.exit);
         self.level += 1;
-        let (maze, max_time_secs) = Self::generate_floor(&mut self.rng, self.start_pos);
+        let (maze, max_time_secs) = generate_floor(&mut self.rng, self.start_pos);
         self.maze = maze;
         self.max_time_secs = max_time_secs;
         self.state = GameState::new_with_max_time(self.maze.start, max_time_secs);
@@ -135,9 +120,12 @@ pub fn main() -> Result<(), JsValue> {
 
             if let Some(dir) = direction {
                 event.prevent_default();
-                let maze = &g.maze as *const Maze;
-                // SAFETY: maze is not mutated during move_player
-                unsafe { g.state.move_player(dir, &*maze) };
+                let Game {
+                    ref maze,
+                    ref mut state,
+                    ..
+                } = *g;
+                state.move_player(dir, maze);
             }
         });
 

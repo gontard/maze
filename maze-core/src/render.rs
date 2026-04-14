@@ -3,13 +3,6 @@ use crate::maze::{Maze, Tile};
 #[derive(Debug, Clone, PartialEq)]
 pub enum DrawCommand {
     Clear,
-    FillRect {
-        x: usize,
-        y: usize,
-        width: usize,
-        height: usize,
-        color: Color,
-    },
     DrawChar {
         x: usize,
         y: usize,

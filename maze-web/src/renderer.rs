@@ -47,21 +47,6 @@ pub fn paint(ctx: &CanvasRenderingContext2d, cmds: &[DrawCommand]) {
                 ctx.set_fill_style_str(color_to_css(color));
                 let _ = ctx.fill_text(text, px, py + 1.0);
             }
-            DrawCommand::FillRect {
-                x,
-                y,
-                width,
-                height,
-                color,
-            } => {
-                ctx.set_fill_style_str(color_to_css(color));
-                ctx.fill_rect(
-                    *x as f64 * CELL_WIDTH,
-                    *y as f64 * CELL_HEIGHT,
-                    *width as f64 * CELL_WIDTH,
-                    *height as f64 * CELL_HEIGHT,
-                );
-            }
         }
     }
 }

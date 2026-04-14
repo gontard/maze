@@ -30,6 +30,21 @@ impl Maze {
         )
     }
 
+    pub fn neighbors(&self, x: usize, y: usize) -> impl Iterator<Item = (usize, usize)> + '_ {
+        const DELTAS: [(i32, i32); 4] = [(0, -1), (0, 1), (-1, 0), (1, 0)];
+        DELTAS.into_iter().filter_map(move |(dx, dy)| {
+            let nx = x as i32 + dx;
+            let ny = y as i32 + dy;
+            if nx >= 0 && ny >= 0 {
+                let (nx, ny) = (nx as usize, ny as usize);
+                if self.is_traversable(nx, ny) {
+                    return Some((nx, ny));
+                }
+            }
+            None
+        })
+    }
+
     pub fn place_exit(&mut self) {
         use std::collections::VecDeque;
 
@@ -42,19 +57,10 @@ impl Maze {
 
         while let Some((x, y)) = queue.pop_front() {
             farthest = (x, y);
-            for (dx, dy) in [(0i32, -1i32), (0, 1), (-1, 0), (1, 0)] {
-                let nx = x as i32 + dx;
-                let ny = y as i32 + dy;
-                if nx >= 0 && ny >= 0 {
-                    let (nx, ny) = (nx as usize, ny as usize);
-                    if nx < self.width
-                        && ny < self.height
-                        && !visited[ny][nx]
-                        && matches!(self.grid[ny][nx], Tile::Path | Tile::Start)
-                    {
-                        visited[ny][nx] = true;
-                        queue.push_back((nx, ny));
-                    }
+            for (nx, ny) in self.neighbors(x, y) {
+                if !visited[ny][nx] {
+                    visited[ny][nx] = true;
+                    queue.push_back((nx, ny));
                 }
             }
         }
@@ -75,29 +81,29 @@ impl Maze {
 
         for _ in 0..count {
             // Pick random odd-aligned room dimensions
-            let rw = {
+            let room_w = {
                 let half_min = min_size / 2;
                 let half_max = max_size / 2;
                 rng.random_range(half_min..=half_max) * 2 + 1
             };
-            let rh = {
+            let room_h = {
                 let half_min = min_size / 2;
                 let half_max = max_size / 2;
                 rng.random_range(half_min..=half_max) * 2 + 1
             };
 
             // Pick random odd-aligned top-left corner within border
-            let max_x = (self.width - 1 - rw) / 2;
-            let max_y = (self.height - 1 - rh) / 2;
+            let max_x = (self.width - 1 - room_w) / 2;
+            let max_y = (self.height - 1 - room_h) / 2;
             if max_x < 1 || max_y < 1 {
                 continue;
             }
-            let rx = rng.random_range(1..=max_x) * 2 - 1;
-            let ry = rng.random_range(1..=max_y) * 2 - 1;
+            let room_x = rng.random_range(1..=max_x) * 2 - 1;
+            let room_y = rng.random_range(1..=max_y) * 2 - 1;
 
             // Carve: only convert Wall to Path
-            for y in ry..ry + rh {
-                for x in rx..rx + rw {
+            for y in room_y..room_y + room_h {
+                for x in room_x..room_x + room_w {
                     if x > 0
                         && x < self.width - 1
                         && y > 0
@@ -124,19 +130,10 @@ impl Maze {
             if (x, y) == self.exit {
                 return Some(dist);
             }
-            for (dx, dy) in [(0i32, -1i32), (0, 1), (-1, 0), (1, 0)] {
-                let nx = x as i32 + dx;
-                let ny = y as i32 + dy;
-                if nx >= 0 && ny >= 0 {
-                    let (nx, ny) = (nx as usize, ny as usize);
-                    if nx < self.width
-                        && ny < self.height
-                        && !visited[ny][nx]
-                        && self.is_traversable(nx, ny)
-                    {
-                        visited[ny][nx] = true;
-                        queue.push_back((nx, ny, dist + 1));
-                    }
+            for (nx, ny) in self.neighbors(x, y) {
+                if !visited[ny][nx] {
+                    visited[ny][nx] = true;
+                    queue.push_back((nx, ny, dist + 1));
                 }
             }
         }
@@ -222,6 +219,51 @@ mod tests {
     }
 
     #[test]
+    fn neighbors_interior_cell_all_traversable() {
+        // 5x5 maze with open center
+        let grid = vec![
+            vec![Tile::Wall, Tile::Wall, Tile::Wall, Tile::Wall, Tile::Wall],
+            vec![Tile::Wall, Tile::Path, Tile::Path, Tile::Path, Tile::Wall],
+            vec![Tile::Wall, Tile::Path, Tile::Start, Tile::Path, Tile::Wall],
+            vec![Tile::Wall, Tile::Path, Tile::Path, Tile::Path, Tile::Wall],
+            vec![Tile::Wall, Tile::Wall, Tile::Wall, Tile::Wall, Tile::Wall],
+        ];
+        let maze = Maze {
+            grid,
+            width: 5,
+            height: 5,
+            start: (2, 2),
+            exit: (2, 2),
+        };
+        let mut ns: Vec<_> = maze.neighbors(2, 2).collect();
+        ns.sort();
+        assert_eq!(ns, vec![(1, 2), (2, 1), (2, 3), (3, 2)]);
+    }
+
+    #[test]
+    fn neighbors_cell_adjacent_to_walls() {
+        // sample_maze: Start at (1,1) has only Exit at (1,2) as neighbor
+        let maze = sample_maze();
+        let ns: Vec<_> = maze.neighbors(1, 1).collect();
+        assert_eq!(ns, vec![(1, 2)]);
+    }
+
+    #[test]
+    fn neighbors_corner_cell() {
+        let maze = sample_maze();
+        // (0,0) is a wall, but even if we ask neighbors of it, they're all walls
+        let ns: Vec<_> = maze.neighbors(0, 0).collect();
+        assert!(ns.is_empty());
+    }
+
+    #[test]
+    fn neighbors_out_of_bounds() {
+        let maze = sample_maze();
+        let ns: Vec<_> = maze.neighbors(99, 99).collect();
+        assert!(ns.is_empty());
+    }
+
+    #[test]
     fn solve_adjacent_start_exit() {
         // sample_maze has start=(1,1) and exit=(1,2), adjacent
         let maze = sample_maze();
@@ -266,19 +308,10 @@ mod tests {
         queue.push_back(from);
 
         while let Some((x, y)) = queue.pop_front() {
-            for (dx, dy) in [(0i32, -1i32), (0, 1), (-1, 0), (1, 0)] {
-                let nx = x as i32 + dx;
-                let ny = y as i32 + dy;
-                if nx >= 0 && ny >= 0 {
-                    let (nx, ny) = (nx as usize, ny as usize);
-                    if nx < maze.width
-                        && ny < maze.height
-                        && !visited[ny][nx]
-                        && maze.is_traversable(nx, ny)
-                    {
-                        visited[ny][nx] = true;
-                        queue.push_back((nx, ny));
-                    }
+            for (nx, ny) in maze.neighbors(x, y) {
+                if !visited[ny][nx] {
+                    visited[ny][nx] = true;
+                    queue.push_back((nx, ny));
                 }
             }
         }

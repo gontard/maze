@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: Maze generator trait
-The system SHALL define a `MazeGenerator` trait with a method that accepts width, height, an optional random seed, and an optional start position, and returns a `Maze`.
+The system SHALL define a `MazeGenerator` trait with a method that accepts width, height, an optional random seed, and an optional start position, and returns a `Maze`. Generator internals SHALL use a named `MazeSetup` struct instead of a tuple for initialization state. Variable names in generators SHALL be descriptive (`room_w` not `rw`, `grid_ax` not `gax`).
 
 #### Scenario: Generate maze with default algorithm
 - **WHEN** a `RecursiveBacktracker` generator is invoked with width=21 and height=21
@@ -77,3 +77,17 @@ The system SHALL place the `Exit` tile via a separate `Maze::place_exit()` metho
 - **GIVEN** a maze that has had rooms carved into it
 - **WHEN** `maze.place_exit()` is called
 - **THEN** the exit is at the farthest point considering the room shortcuts
+
+### Requirement: Parameterized generator tests
+Generator tests for properties shared across all algorithms (dimensions, reachability, solvability, border walls, determinism, custom start) SHALL be defined once via a macro and instantiated for each `MazeGenerator` implementation.
+
+#### Scenario: All algorithms tested with same properties
+- **WHEN** generator tests are run
+- **THEN** RecursiveBacktracker, Kruskal, and Prim each pass the shared property suite
+
+### Requirement: Remove unused import
+The `use rand::prelude::IndexedRandom` import in generator.rs SHALL be removed as it is unused.
+
+#### Scenario: Clean imports
+- **WHEN** generator.rs is compiled
+- **THEN** no unused import warnings are emitted
