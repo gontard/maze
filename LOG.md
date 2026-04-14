@@ -233,3 +233,41 @@ OpenSpec explore mode for design discussion (WASM feasibility, architecture opti
 ### What's next
 
 Potential features from Obsidian backlog: secret passages, monsters with weapons/spells, inventory system. Open questions from design: canvas tile size tuning, game-over screen for web, floor interstitial screen.
+
+## Session 2026-04-14: Code Quality Cleanup
+
+### What we built
+
+No new features — a cleanup pass addressing dead code, duplication, an unsafe block, and naming issues identified during code analysis.
+
+### Changes
+
+- **maze-core/src/render.rs** — Removed unused `DrawCommand::FillRect` variant. No code ever emitted it.
+- **maze-core/src/maze.rs** — Added `Maze::neighbors(x, y)` iterator returning traversable adjacent cells. Refactored `place_exit()` and `solve()` to use it. Renamed `carve_rooms` variables (`rw`→`room_w`, `rh`→`room_h`, `rx`→`room_x`, `ry`→`room_y`). 4 new neighbor tests.
+- **maze-core/src/generator.rs** — Replaced `init_maze` 5-tuple return with named `MazeSetup` struct. Renamed grid-coordinate variables (`gax`→`grid_ax`, etc.) in Kruskal and Prim. Replaced ~380 lines of duplicated per-algorithm tests with a `generator_tests!` macro instantiated for all three algorithms (15 tests × 3). BFS test helpers refactored to use `neighbors()`.
+- **maze-core/src/floor.rs** — New module: extracted `generate_floor()` function (algorithm selection, room carving, exit placement, time budget) that was duplicated between terminal and web frontends. Derives maze seed from the shared RNG for full determinism. 4 tests.
+- **maze-terminal/src/main.rs** — Replaced inline floor generation with `maze_core::floor::generate_floor`.
+- **maze-web/src/lib.rs** — Replaced `Game::generate_floor` with shared `generate_floor`. Removed unsafe raw-pointer borrow workaround in keyboard handler, replaced with struct destructuring.
+- **maze-terminal/src/renderer.rs**, **maze-web/src/renderer.rs** — Removed `FillRect` match arms.
+
+### Key decisions
+
+- **`neighbors()` filters for traversability** — every call site needed traversable neighbors, so the filter is baked into the iterator rather than left to callers.
+- **`generator_tests!` macro over `#[test_case]` crate** — avoids a new dependency for simple parameterization.
+- **`MazeSetup` struct is private** — only used within `generator.rs`, not part of the public API.
+- **Floor generation derives seed from RNG** — the original code passed `None` as seed to generators (non-deterministic). Changed to `Some(rng.random::<u64>())` so floor generation is fully deterministic given a seed.
+- **Kept `Vec<Vec<Tile>>` grid** — converting to flat `Vec<Tile>` was considered but deferred as a larger refactor.
+- **Kept `width`/`height` as pub fields** — deriving from grid wasn't worth the churn across three crates.
+- **`IndexedRandom` import was not dead** — initial analysis was wrong; `choose()` needs it. Caught during implementation.
+
+### Workflow
+
+OpenSpec explore mode for analysis, then propose for artifacts, then apply for implementation. 99 tests total (75→99: +4 neighbor, +4 floor, +16 from parameterized suite filling Kruskal/Prim gaps). Net diff: -522 lines removed, +766 added (including new tests and specs).
+
+### Commits
+
+1. `72cd2a8` - Clean up dead code, duplication, unsafe block, and naming issues
+
+### What's next
+
+Potential features from Obsidian backlog: secret passages, monsters with weapons/spells, inventory system. Remaining code quality items: flat grid (`Vec<Tile>` with index math), `Maze` width/height as methods, web frontend tests with injectable clock.
