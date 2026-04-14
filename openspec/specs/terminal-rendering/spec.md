@@ -27,11 +27,23 @@ The system SHALL render the player position as `P ` overlaid on whatever tile th
 - **THEN** the player's current position shows `P ` instead of the underlying tile
 
 ### Requirement: Full maze redraw
-The system SHALL redraw the entire maze on each player move.
+The system SHALL consume `Vec<DrawCommand>` from `render_frame` and translate each command to crossterm output. The terminal renderer SHALL contain no rendering decisions — only mechanical mapping from draw commands to crossterm calls.
 
 #### Scenario: Maze updates after move
 - **WHEN** the player moves
-- **THEN** the terminal displays the updated maze with the player at the new position
+- **THEN** the terminal backend calls `render_frame`, iterates the returned draw commands, and outputs corresponding crossterm calls
+
+#### Scenario: FillRect mapping
+- **WHEN** the backend receives `DrawCommand::FillRect { x, y, width, height, color }`
+- **THEN** it outputs the appropriate crossterm colored block characters at the terminal position
+
+#### Scenario: DrawText mapping
+- **WHEN** the backend receives `DrawCommand::DrawText { x, y, text, color }`
+- **THEN** it outputs the text via crossterm at the terminal position
+
+#### Scenario: Clear mapping
+- **WHEN** the backend receives `DrawCommand::Clear`
+- **THEN** it clears the terminal screen via crossterm
 
 ### Requirement: Tile-to-character mapping is centralized
 The system SHALL define all tile-to-character mappings in the renderer module, so game logic never deals with display characters.
