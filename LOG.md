@@ -177,3 +177,59 @@ OpenSpec explore mode for algorithm comparison and design (Option A/B/C trade-of
 ### What's next
 
 Potential features: algorithm name display (shorter names or wider maze), difficulty progression (algorithm weighting by floor), more algorithms (Eller's, Wilson's, Sidewinder), fog of war, minimap, score system.
+
+## Session 2026-04-13: WASM Web Version
+
+### What we built
+
+A browser-playable version of the maze game compiled to WASM, rendered on HTML5 Canvas with monospace characters. Restructured the project into a Cargo workspace with a shared `DrawCommand` rendering abstraction consumed by both terminal and web backends.
+
+### Architecture
+
+Three-crate workspace:
+
+- **maze-core** (lib) — game logic, maze generation, `DrawCommand`-based rendering. Zero platform dependencies. All rendering decisions live here.
+- **maze-terminal** (bin) — crossterm frontend. Thin translator: `DrawCommand` → crossterm calls.
+- **maze-web** (cdylib) — WASM/Canvas frontend. Thin translator: `DrawCommand` → Canvas 2D API calls. `requestAnimationFrame` game loop, `keydown` event listeners.
+
+The `DrawCommand` enum is the key abstraction:
+- `Clear` — new frame
+- `DrawChar { x, y, ch, color }` — single character at grid position (tiles, player)
+- `DrawText { x, y, text, color }` — text string (status bar labels)
+- `FillRect { x, y, width, height, color }` — filled rectangle (available but unused currently)
+
+### Key decisions made during exploration
+
+- **Workspace over feature flags** — platform-specific code spans entire modules (renderer, entry point, event handling). Separate crates make it impossible to accidentally pull crossterm into WASM. Each crate compiles independently.
+- **Low-level DrawCommand** — maximizes test coverage at core level. Backends are mechanical translators with zero logic.
+- **Timer externalized from GameState** — removed `start_time: Instant` (not available in WASM). Game loop passes `elapsed_secs: f64` into `check_timeout()`. Terminal uses `Instant::now()`, web uses `performance.now()`.
+- **Character-based Canvas rendering** — initially tried colored rectangles (`FillRect`), but lost the rogue-like aesthetic. Switched to `DrawChar` with monospace font on Canvas, preserving the `#`, `@`, `E`, `S` characters.
+- **Cell proportions 10x18px** — monospace terminal characters have ~0.6:1 width:height ratio. Square tiles made the web version too wide.
+- **wasm-pack with `--target web`** — ES module output, no bundler needed. Simple HTML shell loads WASM directly.
+- **No Playwright in CI** — WASM build compiling is the smoke test. Canvas layer is thin enough to trust by inspection.
+
+### Changes
+
+- **Cargo.toml** — workspace root with 3 members
+- **maze-core/src/render.rs** — new module: `DrawCommand`, `Color` enums, `render_frame()` function, `format_timer()`, `timer_urgency()`, `tile_char()`. 15 tests.
+- **maze-core/src/game.rs** — removed `start_time: Instant` field, `check_timeout()` now takes `elapsed_secs` parameter, removed `elapsed_secs()` method.
+- **maze-terminal/src/renderer.rs** — rewritten to consume `Vec<DrawCommand>` from core.
+- **maze-terminal/src/main.rs** — computes elapsed from `Instant` and passes to `check_timeout()` and `render_frame()`.
+- **maze-web/src/lib.rs** — WASM entry point: game state, `requestAnimationFrame` loop, keyboard handler, floor progression.
+- **maze-web/src/renderer.rs** — Canvas painter: `DrawChar` → `fill_text()`, `DrawText` → `fill_text()`, `Clear` → `fill_rect()` black.
+- **web/index.html** — minimal HTML shell with `<canvas>` and ES module WASM loader.
+- **.github/workflows/ci.yml** — CI: `cargo test --workspace`, `wasm-pack test --node`, `wasm-pack build`, GitHub Pages deploy on main.
+
+### Workflow
+
+OpenSpec explore mode for design discussion (WASM feasibility, architecture options, testing strategy), then propose for all artifacts (proposal, 5 specs, design, 23 tasks), then implementation. Iterated on web rendering after first playtest — switched from colored rectangles to character-based rendering with correct proportions. 75 tests total (15 new render tests, timer tests updated for new API, old terminal renderer tests replaced by core DrawCommand tests).
+
+### Commits
+
+1. `cce6b09` - Add WASM web version change proposal with specs, design, and tasks
+2. `4d08790` - Restructure into workspace with WASM web target
+3. `2a64985` - Fix web rendering: character-based display, proportions, and timer
+
+### What's next
+
+Potential features from Obsidian backlog: secret passages, monsters with weapons/spells, inventory system. Open questions from design: canvas tile size tuning, game-over screen for web, floor interstitial screen.
