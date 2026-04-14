@@ -17,16 +17,6 @@ fn to_crossterm_color(color: Color) -> CtColor {
     }
 }
 
-fn tile_char(color: Color) -> char {
-    match color {
-        Color::White => '#', // Wall
-        Color::Black => ' ', // Path
-        Color::Green => 'E', // Start/Exit (will be overridden for start)
-        Color::Cyan => '@',  // Player
-        _ => '?',
-    }
-}
-
 pub fn render(
     maze: &Maze,
     player: (usize, usize),
@@ -38,8 +28,7 @@ pub fn render(
     let mut stdout = io::stdout();
 
     // Collect grid chars for the maze area (rows 1..=maze.height)
-    let mut grid: Vec<Vec<(char, Option<CtColor>)>> =
-        vec![vec![(' ', None); maze.width]; maze.height];
+    let mut grid: Vec<Vec<char>> = vec![vec![' '; maze.width]; maze.height];
 
     // Status bar pieces
     let mut floor_label = String::new();
@@ -61,14 +50,15 @@ pub fn render(
                     }
                 }
             }
-            DrawCommand::FillRect { x, y, color, .. } => {
+            DrawCommand::DrawChar { x, y, ch, .. } => {
                 if *y >= 1 && *y <= maze.height {
                     let row = *y - 1;
                     if *x < maze.width {
-                        grid[row][*x] = (tile_char(*color), None);
+                        grid[row][*x] = *ch;
                     }
                 }
             }
+            DrawCommand::FillRect { .. } => {}
         }
     }
 
@@ -94,7 +84,7 @@ pub fn render(
     // Render maze grid
     let mut buf = String::with_capacity(maze.height * (maze.width + 2));
     for row in &grid {
-        for &(ch, _) in row {
+        for &ch in row {
             buf.push(ch);
         }
         buf.push_str("\r\n");

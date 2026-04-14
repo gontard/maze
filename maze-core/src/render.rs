@@ -10,6 +10,12 @@ pub enum DrawCommand {
         height: usize,
         color: Color,
     },
+    DrawChar {
+        x: usize,
+        y: usize,
+        ch: char,
+        color: Color,
+    },
     DrawText {
         x: usize,
         y: usize,
@@ -65,6 +71,15 @@ fn format_timer(elapsed: f64, max_time: f64) -> String {
     )
 }
 
+fn tile_char(tile: Tile) -> char {
+    match tile {
+        Tile::Wall => '#',
+        Tile::Path => ' ',
+        Tile::Start => 'S',
+        Tile::Exit => 'E',
+    }
+}
+
 fn tile_color(tile: Tile) -> Color {
     match tile {
         Tile::Wall => Color::White,
@@ -100,8 +115,11 @@ pub fn render_frame(
 
     let timer_text = format_timer(elapsed, max_time);
     let timer_color = urgency_color(timer_urgency(elapsed, max_time));
+    let timer_char_len = timer_text.chars().count();
+    // Right-align: position so the timer ends at maze.width
+    let timer_x = maze.width.saturating_sub(timer_char_len);
     cmds.push(DrawCommand::DrawText {
-        x: maze.width,
+        x: timer_x,
         y: 0,
         text: timer_text,
         color: timer_color,
@@ -110,17 +128,15 @@ pub fn render_frame(
     // Maze grid starting at row 1
     for y in 0..maze.height {
         for x in 0..maze.width {
-            let (color, is_player) = if (x, y) == player {
-                (Color::Cyan, true)
+            let (ch, color) = if (x, y) == player {
+                ('@', Color::Cyan)
             } else {
-                (tile_color(maze.grid[y][x]), false)
+                (tile_char(maze.grid[y][x]), tile_color(maze.grid[y][x]))
             };
-            let _ = is_player; // color already set
-            cmds.push(DrawCommand::FillRect {
+            cmds.push(DrawCommand::DrawChar {
                 x,
                 y: y + 1, // offset by 1 for status bar
-                width: 1,
-                height: 1,
+                ch,
                 color,
             });
         }
@@ -181,70 +197,68 @@ mod tests {
     }
 
     #[test]
-    fn frame_contains_player_rect() {
+    fn frame_contains_player_char() {
         let maze = small_maze();
         let cmds = render_frame(&maze, (1, 1), 1, 0.0, 60.0);
         let has_player = cmds.iter().any(|c| {
             matches!(
                 c,
-                DrawCommand::FillRect {
+                DrawCommand::DrawChar {
                     x: 1,
                     y: 2,
+                    ch: '@',
                     color: Color::Cyan,
-                    ..
                 }
             )
         });
-        assert!(has_player, "should contain player rect at (1,2) with Cyan");
+        assert!(has_player, "should contain player '@' at (1,2) with Cyan");
     }
 
     #[test]
-    fn frame_contains_wall_rects() {
+    fn frame_contains_wall_char() {
         let maze = small_maze();
         let cmds = render_frame(&maze, maze.start, 1, 0.0, 60.0);
-        // Top-left wall at grid (0,0) should be at draw y=1
         let has_wall = cmds.iter().any(|c| {
             matches!(
                 c,
-                DrawCommand::FillRect {
+                DrawCommand::DrawChar {
                     x: 0,
                     y: 1,
+                    ch: '#',
                     color: Color::White,
-                    ..
                 }
             )
         });
-        assert!(has_wall, "should contain wall rect");
+        assert!(has_wall, "should contain wall '#' at (0,1)");
     }
 
     #[test]
-    fn frame_contains_exit_rect() {
+    fn frame_contains_exit_char() {
         let maze = small_maze();
         let cmds = render_frame(&maze, maze.start, 1, 0.0, 60.0);
-        // Exit at grid (1,2) → draw y=3
         let has_exit = cmds.iter().any(|c| {
             matches!(
                 c,
-                DrawCommand::FillRect {
+                DrawCommand::DrawChar {
                     x: 1,
                     y: 3,
+                    ch: 'E',
                     color: Color::Green,
-                    ..
                 }
             )
         });
-        assert!(has_exit, "should contain exit rect at (1,3) with Green");
+        assert!(has_exit, "should contain exit 'E' at (1,3)");
     }
 
     #[test]
-    fn frame_rect_count_matches_grid() {
+    fn frame_char_count_matches_grid() {
         let maze = small_maze();
         let cmds = render_frame(&maze, maze.start, 1, 0.0, 60.0);
-        let rect_count = cmds
+        let char_count = cmds
             .iter()
-            .filter(|c| matches!(c, DrawCommand::FillRect { .. }))
+            .filter(|c| matches!(c, DrawCommand::DrawChar { .. }))
             .count();
-        assert_eq!(rect_count, maze.width * maze.height);
+        assert_eq!(char_count, maze.width * maze.height);
     }
 
     #[test]
@@ -298,7 +312,15 @@ mod tests {
 
     #[test]
     fn timer_text_is_right_aligned() {
-        let maze = small_maze();
+        // Use a wide maze so the timer fits
+        let grid = vec![vec![Tile::Wall; 41]; 3];
+        let maze = Maze {
+            grid,
+            width: 41,
+            height: 3,
+            start: (1, 1),
+            exit: (39, 1),
+        };
         let cmds = render_frame(&maze, maze.start, 1, 0.0, 60.0);
         let timer = cmds.iter().find(|c| {
             matches!(c,
@@ -306,10 +328,12 @@ mod tests {
             )
         });
         match timer {
-            Some(DrawCommand::DrawText { x, .. }) => {
+            Some(DrawCommand::DrawText { x, text, .. }) => {
+                let char_len = text.chars().count();
                 assert_eq!(
-                    *x, maze.width,
-                    "timer x should equal maze width (right-aligned marker)"
+                    *x + char_len,
+                    maze.width,
+                    "timer should end at maze width (right-aligned)"
                 );
             }
             _ => panic!("timer text not found"),

@@ -105,12 +105,11 @@ pub fn main() -> Result<(), JsValue> {
 
     let game = Rc::new(RefCell::new(Game::new()));
 
-    // Set canvas size
+    // Set canvas size using character cell dimensions
     {
         let g = game.borrow();
-        let tile_size = 16;
-        canvas.set_width((g.maze.width * tile_size) as u32);
-        canvas.set_height(((g.maze.height + 1) * tile_size) as u32); // +1 for status bar
+        canvas.set_width((g.maze.width as f64 * renderer::CELL_WIDTH) as u32);
+        canvas.set_height(((g.maze.height + 1) as f64 * renderer::CELL_HEIGHT) as u32);
     }
 
     // Keyboard handler
@@ -171,7 +170,7 @@ pub fn main() -> Result<(), JsValue> {
                     elapsed,
                     gm.max_time_secs,
                 );
-                renderer::paint(&ctx, &cmds, 16);
+                renderer::paint(&ctx, &cmds);
                 return;
             }
 
@@ -183,7 +182,7 @@ pub fn main() -> Result<(), JsValue> {
                 elapsed,
                 gm.max_time_secs,
             );
-            renderer::paint(&ctx, &cmds, 16);
+            renderer::paint(&ctx, &cmds);
 
             request_animation_frame(f.borrow().as_ref().unwrap());
         }));
